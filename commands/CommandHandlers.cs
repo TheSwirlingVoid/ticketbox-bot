@@ -14,10 +14,10 @@ static class CommandHandlers {
 		var suggestEmbedBuilder = SuggestFunctions.createEmbed(suggestionText, command, null, 0, 0);
 
 		/* --------------------------- Bot Embed Response --------------------------- */
-		var message = SuggestFunctions.createMessage(command, suggestEmbedBuilder);
+		var message = await SuggestFunctions.createMessage(command, suggestEmbedBuilder);
 		/* ------------------------------- Data Saving ------------------------------ */
 		// Get the server's document
-		SuggestFunctions.saveInitialSuggestion(command.GuildId.Value, command, message.Id, suggestionText);
+		SuggestFunctions.saveInitialSuggestion(Program.collection, command.GuildId.GetValueOrDefault(), command, message.Id, suggestionText);
 
 	}
 }

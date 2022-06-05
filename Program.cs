@@ -10,19 +10,14 @@ namespace TicketBox
 		
 		public static void Main(string[] args) => new Program().MainAsync().GetAwaiter().GetResult();
 
-		public static DiscordSocketClient client;
+		public static DiscordSocketClient client = new DiscordSocketClient();
 		private static readonly string connectionString = "mongodb://localhost:27017/";
-		public static IMongoDatabase database;
-		public static MongoClient mongoClient;
-		public static IMongoCollection<BsonDocument> collection;
+		public static MongoClient mongoClient = new MongoClient(connectionString);
+		public static IMongoDatabase database = mongoClient.GetDatabase("ticketbox-bot");
+		public static IMongoCollection<BsonDocument> collection = database.GetCollection<BsonDocument>("DiscordServers");
 		
 		public async Task MainAsync()
 		{
-			mongoClient = new MongoClient(connectionString);
-			database = mongoClient.GetDatabase("ticketbox-bot");
-			collection = database.GetCollection<BsonDocument>("DiscordServers");
-
-			client = new DiscordSocketClient();
 			client.Log += Log; // add the log function to handle log events
 			client.Ready += client_ready;
 			client.JoinedGuild += JoinedGuild;
@@ -104,7 +99,7 @@ namespace TicketBox
 					},
 					{ "current_suggestions", new BsonArray {} }
 				};
-				collection.InsertOne(newServerDocument);
+				await collection.InsertOneAsync(newServerDocument);
 			}
 		}
 
@@ -113,7 +108,17 @@ namespace TicketBox
 			switch (messageComponent.Data.CustomId)
 			{
 				case "upvote-suggestion" or "downvote-suggestion":
-				ButtonHandlers.VoteButton(messageComponent, messageComponent.Data.CustomId);
+				try
+				{
+					await ButtonHandlers.VoteButton(messageComponent, messageComponent.Data.CustomId);
+				}
+				catch(Discord.Net.HttpException e)
+				{
+					if (e.DiscordCode != DiscordErrorCode.CannotSendEmptyMessage)
+					{
+						// code for discarding "cannot send an empty message" error
+					}
+				}
 				break;
 			}
 		}

@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class SuggestFunctions {
+	private static string[] writeStrings = {"dislikes", "favors"};
 	public static async Task<Discord.Rest.RestFollowupMessage> createMessage(SocketSlashCommand originalCommand, EmbedBuilder messageEmbedBuilder)
 	{
 		// Defer the response, meaning the bot will recognize that the command was sent
@@ -28,10 +29,14 @@ static class SuggestFunctions {
 		var userAvatar = interaction.User.GetAvatarUrl();
 		var userName = interaction.User.ToString();
 		var suggestionDate = interaction.CreatedAt;
-		if (message != null) {
+		if (message != null) 
+		{
 			var embedAuthor = message.Embeds.ToArray()[0].Author;
-			userAvatar = embedAuthor.Value.IconUrl;
-			userName = embedAuthor.Value.Name;
+			if (embedAuthor != null)
+			{
+				userAvatar = embedAuthor.Value.IconUrl;
+				userName = embedAuthor.Value.Name;
+			}
 			suggestionDate = message.CreatedAt;
 		}
 
@@ -46,12 +51,12 @@ static class SuggestFunctions {
 		return buildEmbedWithData(suggestionText, userAvatar, userName, totalVoters, percentFavored, percentDisliked, suggestionDate);
 	}
 
-	public static void saveInitialSuggestion(ulong guildId, SocketSlashCommand command, int messageId, string suggestionText)
+	public static void saveInitialSuggestion(IMongoCollection<BsonDocument> collection, ulong guildId, SocketSlashCommand command, ulong messageId, string suggestionText)
 	{
 		// Find the document by filtering by server ID
 		var serverFilter = Program.serverIDFilter(guildId);
 		// Get the server's mongoDB Document
-		var serverDocument = Program.collection.Find(serverFilter).ToList()[0];
+		var serverDocument = collection.Find(serverFilter).ToList()[0];
 
 		// Prepare the structured data for the document's suggestion list
 		BsonDocument suggestionDocument = new BsonDocument
@@ -84,6 +89,81 @@ static class SuggestFunctions {
 		}
 		// Return -1 if no suggestion with the given messageID exists
 		return -1;
+	}
+
+	public static int votedValue(BsonDocument document, int indexOfSuggestion, short voteNum)
+	{
+		return voteValue(document, indexOfSuggestion, Convert.ToInt16(voteNum));
+	}
+
+	public static int otherValue(BsonDocument document, int indexOfSuggestion, short voteNum)
+	{
+		return voteValue(document, indexOfSuggestion, Convert.ToInt16(1-voteNum));
+	}
+
+	public static bool userChoiceStagnant(bool? previousValue, short voteNum)
+	{
+		var boolUserChoice = Convert.ToBoolean(voteNum);
+		return (previousValue == boolUserChoice);
+	}
+
+	public static bool? userPreviousValue(BsonDocument document, ulong userId, int indexOfSuggestion)
+	{
+		return (bool?)document["current_suggestions"][indexOfSuggestion]["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
+	}
+
+	public static bool userVoted(bool? previousValue)
+	{
+		if (previousValue.HasValue)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	public static short voteInteger(string voteType)
+	{
+		short voteChosen = 0;
+		switch(voteType)
+		{
+			case "upvote-suggestion":
+			voteChosen = 1; // favor
+			break;
+
+			case "downvote-suggestion":
+			voteChosen = 0; // dislike
+			break;
+		}
+		return voteChosen;
+	}
+
+	public static string voteNumString(short voteNum)
+	{
+		return writeStrings[voteNum];
+	}
+
+	public static string getUpdateString(int indexOfSuggestion, short voteNum)
+	{
+		return "current_suggestions."+indexOfSuggestion.ToString()+".votes." + voteNumString(voteNum);
+	}
+
+	public static async Task updateEmbed(BsonDocument document, int indexOfSuggestion, SocketMessageComponent messageComponent)
+	{
+		var newVotes = document["current_suggestions"][indexOfSuggestion]["votes"];
+		int favors = newVotes["favors"].AsInt32;
+		int dislikes = newVotes["dislikes"].AsInt32;
+		
+		await messageComponent.Channel.ModifyMessageAsync(messageComponent.Message.Id, m => {
+			m.Embed = createEmbed(document["current_suggestions"][indexOfSuggestion]["suggestion_text"].AsString, messageComponent, messageComponent.Message, favors, dislikes).Build();
+		});
+	}
+
+	private static int voteValue(BsonDocument document, int indexOfSuggestion, short voteNum)
+	{
+		return document["current_suggestions"][indexOfSuggestion]["votes"][writeStrings[voteNum]].ToInt32();
 	}
 
 	private static EmbedBuilder buildEmbedWithData(String suggestionText, String userAvatar, String userName, decimal totalVoters, decimal percentFavored, decimal percentDisliked, DateTimeOffset suggestionDate)
