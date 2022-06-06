@@ -49,13 +49,17 @@ namespace TicketBox
 		private async Task client_ready()
 		{
 			var guild = client.GetGuild(837935655258554388);
+
+			/* -------------------------------- Commands -------------------------------- */
 			List<ApplicationCommandProperties> commands = new();
-			/* ----------------------------- Suggest Command ---------------------------- */
+
+			// SUGGEST COMMAND
 			var suggestCommand = new SlashCommandBuilder()
 				.WithName(BotCommands.SUGGESTCOMMAND)
 				.WithDescription("Make a new suggestion for the server!")
 				.AddOption("suggestion", ApplicationCommandOptionType.String, "Enter your suggestion!", true);
 			commands.Add(suggestCommand.Build());
+
 			/* -------------------------- Commmand Registering -------------------------- */
 			try 
 			{	
@@ -70,6 +74,9 @@ namespace TicketBox
 				Console.WriteLine(e.ToString());
 			}
 			/* -------------------------------------------------------------------------- */
+
+			await client.SetStatusAsync(UserStatus.Online);
+			await client.SetGameAsync("around in my testing phase. I don't bite!", null, ActivityType.Playing);
 		}
 
 		private async Task SlashCommandHandler(SocketSlashCommand command)
