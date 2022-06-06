@@ -172,6 +172,26 @@ static class SuggestFunctions {
 		int favoredMultiplier = Convert.ToInt32(percentFavored/10);
 		int dislikedMultiplier = Convert.ToInt32(percentDisliked/10);
 
+		Func<int,int> numStartBars = x => Math.Min(Math.Max(0, x), 1);
+		Func<int,int> numMidBars = x => Math.Min(Math.Max(0, x-1), 8);
+		Func<int,int> numEndBars = x => Math.Max(0, x-9);
+
+		var dislikeBar = 
+			string.Concat(Enumerable.Repeat("<:negativebar_full_left:983184377670402118>", numStartBars(dislikedMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:negativebar_full:983184379947917332>", numMidBars(dislikedMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:negativebar_full_right:983184378836422656>", numEndBars(dislikedMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(dislikedMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(dislikedMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(dislikedMultiplier)));
+
+		var favorBar = 
+			string.Concat(Enumerable.Repeat("<:bar_full_left:983184373258027028>", numStartBars(favoredMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_full:983184376546345030>", numMidBars(favoredMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_full_right:983184375061569536>", numEndBars(favoredMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(favoredMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(favoredMultiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(favoredMultiplier)));
+
 		// footer string (ex. "1 user has voted" vs "2 users have voted")
 		var footerString = " users have voted. ";
 		if (totalVoters == 1)
@@ -189,12 +209,10 @@ static class SuggestFunctions {
 			)
 			.WithTimestamp(suggestionDate)
 		.AddField("Stats",
-			string.Concat(Enumerable.Repeat(Emoji.Parse(":green_square:"), favoredMultiplier ))
-			+ string.Concat(Enumerable.Repeat(Emoji.Parse(":black_large_square:"), 10-favoredMultiplier ))
+			favorBar
 			+ "\n**"+percentFavored+"%** Favored"
 			+ "\n"
-			+ string.Concat(Enumerable.Repeat(Emoji.Parse(":red_square:"), dislikedMultiplier ))
-			+ string.Concat(Enumerable.Repeat(Emoji.Parse(":black_large_square:"), 10-dislikedMultiplier ))
+			+ dislikeBar
 			+ "\n**"+percentDisliked+"%** Disliked"
 		);
 	}
