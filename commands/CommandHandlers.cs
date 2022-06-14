@@ -5,19 +5,25 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class CommandHandlers {
-	public static async Task SuggestionCommand(SocketSlashCommand command) 
+	public static async Task PollDualChoiceCommand(SocketSlashCommand command, string pollText) 
 	{	
-		
+		var expiryDate = DateTimeOffset.Now.Date.AddDays(7);
+		var stringExpiryDate = expiryDate.Date.ToString("MM/dd/yyyy");
+		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
 		/* ------------------------------ Embed Builder ----------------------------- */
 		var commandOptions = command.Data.Options.ToArray();
-		var suggestionText = (string) commandOptions[0].Value;
-		var suggestEmbedBuilder = SuggestFunctions.createEmbed(suggestionText, command, null, 0, 0);
+		var embedData = new SuggestData()
+					.upvotes(0)
+					.downvotes(0)
+					.pollText(pollText)
+					.expiryDate(stringExpiryDate);
+		var pollEmbedBuilder = DualChoiceFunctions.createEmbed(command, null, embedData);
 
 		/* --------------------------- Bot Embed Response --------------------------- */
-		var message = await SuggestFunctions.createMessage(command, suggestEmbedBuilder);
+		var message = await DualChoiceFunctions.createMessage(command, pollEmbedBuilder);
 		/* ------------------------------- Data Saving ------------------------------ */
 		// Get the server's document
-		SuggestFunctions.saveInitialSuggestion(Program.collection, command.GuildId.GetValueOrDefault(), command, message.Id, suggestionText);
+		DualChoiceFunctions.saveInitialPoll(Program.discordServersCollection, command.GuildId.GetValueOrDefault(), command, message.Id, pollText, unixExpiryTime);
 
 	}
 }
