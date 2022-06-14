@@ -5,13 +5,14 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class ButtonHandlers {
-	public static async Task VoteButton(SocketMessageComponent messageComponent, string voteType)
+	public static async Task VoteButton(IMongoCollection<BsonDocument> collection, SocketMessageComponent messageComponent, VoteStyle voteType)
 	{
 		/* ------------------------ Server Document Location ------------------------ */
 		ulong messageId = messageComponent.Message.Id;
 		// Filter for server document
-		var filter = Program.serverIDFilter(messageComponent.GuildId.GetValueOrDefault());
-		var document = Program.discordServersCollection.Find(filter).ToList()[0];
+		var serverId = messageComponent.GuildId.GetValueOrDefault();
+		var filter = Program.serverIDFilter(serverId);
+		var document = collection.Find(filter).ToList()[0];
 		/* --------------------------- Index of Poll -------------------------- */
 		// Get all polls, find the index of the poll based on messageId
 		var allPolls = document["current_polls_dualchoice"];
@@ -29,8 +30,7 @@ static class ButtonHandlers {
 		bool userVoted = DualChoiceFunctions.userVoted(userPreviousValue);
 
 		/* ------------------------ Upvote/Downvote Handling ------------------------ */
-		short voteNum = DualChoiceFunctions.voteInteger(voteType);
-		if (DualChoiceFunctions.userChoiceStagnant(userPreviousValue, voteNum))
+		if (DualChoiceFunctions.userChoiceStagnant(userPreviousValue, voteType))
 		{
 			// Return if the user hasn't picked a different option
 			await messageComponent.RespondAsync("You have already selected this vote! You can still change your vote by clicking the other option.", ephemeral: true);
@@ -42,21 +42,21 @@ static class ButtonHandlers {
 				+ index
 				+ ".votes.voters."
 				+ messageComponent.User.Id.ToString(),
-			Convert.ToBoolean(voteNum));
+			Convert.ToBoolean(voteType));
 		// get the value of upvotes/downvotes
-		int currentValue = DualChoiceFunctions.votedValue(document, index, voteNum);
-		int currentOtherValue = DualChoiceFunctions.otherValue(document, index, voteNum);
+		int currentValue = DualChoiceFunctions.votedValue(document, index, voteType);
+		int currentOtherValue = DualChoiceFunctions.otherValue(document, index, voteType);
 
 		// If the user already voted, take their vote out of the other option
 		if (userVoted) 
 			// if they changed their vote, subtract their vote from the other value
-			await Program.discordServersCollection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, Convert.ToInt16(1-voteNum)), currentOtherValue-1));
+			await collection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, 1-voteType), currentOtherValue-1));
 
-		await Program.discordServersCollection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, voteNum), currentValue+1));
-		await Program.discordServersCollection.UpdateOneAsync(filter, updateInstruction);
+		await collection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, voteType), currentValue+1));
+		await collection.UpdateOneAsync(filter, updateInstruction);
 		/* ----------------------------- Message Editing ---------------------------- */
-		var updatedDoc = Program.discordServersCollection.Find(filter).ToList()[0];
-		await DualChoiceFunctions.updateEmbed(updatedDoc, index, messageComponent);
+		var updatedDoc = collection.Find(filter).ToList()[0];
+		await DualChoiceFunctions.updateEmbed(updatedDoc, index, false, messageComponent);
 
 
 		if (userVoted)
@@ -64,5 +64,16 @@ static class ButtonHandlers {
 		else {
 			await messageComponent.RespondAsync("Vote successful!", ephemeral: true);
 		}
+	}
+	public static async Task CloseDCPoll(IMongoCollection<BsonDocument> collection, SocketMessageComponent messageComponent)
+	{
+		var serverId = messageComponent.GuildId.GetValueOrDefault();
+		var messageId = messageComponent.Message.Id;
+
+		var document = Program.getServerDocument(collection, serverId);
+		var index = DualChoiceFunctions.indexOfPoll(document["current_polls_dualchoice"].AsBsonArray, messageId);
+		await DualChoiceFunctions.updateEmbed(document, index, true, messageComponent);
+		await DualChoiceFunctions.removePollData(collection, messageId, serverId);
+		await messageComponent.RespondAsync("Poll successfully closed!", ephemeral: true);
 	}
 }

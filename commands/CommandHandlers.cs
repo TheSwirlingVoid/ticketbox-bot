@@ -8,15 +8,19 @@ static class CommandHandlers {
 	public static async Task PollDualChoiceCommand(SocketSlashCommand command, string pollText) 
 	{	
 		var expiryDate = DateTimeOffset.Now.Date.AddDays(7);
-		var stringExpiryDate = expiryDate.Date.ToString("MM/dd/yyyy");
+		var stringExpiryDate = $"Expires {expiryDate.Date.ToString("MM/dd/yyyy")}";
 		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
 		/* ------------------------------ Embed Builder ----------------------------- */
 		var commandOptions = command.Data.Options.ToArray();
-		var embedData = new SuggestData()
+		var embedData = new DualChoiceData()
 					.upvotes(0)
 					.downvotes(0)
 					.pollText(pollText)
-					.expiryDate(stringExpiryDate);
+					.userAvatar(command.User.GetAvatarUrl())
+					.userName(command.User.ToString())
+					.pollDate(DateTimeOffset.Now)
+					.expiryDate(stringExpiryDate)
+					.closedVoting(false);
 		var pollEmbedBuilder = DualChoiceFunctions.createEmbed(command, null, embedData);
 
 		/* --------------------------- Bot Embed Response --------------------------- */

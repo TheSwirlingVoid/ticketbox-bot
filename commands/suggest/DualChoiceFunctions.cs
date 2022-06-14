@@ -16,35 +16,24 @@ static class DualChoiceFunctions {
 			new ComponentBuilder()
 			.AddRow(
 				new ActionRowBuilder()
-					.WithButton(Emoji.Parse(":thumbsup:").ToString(), "upvote-poll", ButtonStyle.Primary)
-					.WithButton(Emoji.Parse(":thumbsdown:").ToString(), "downvote-poll", ButtonStyle.Primary)
+					.WithButton("Upvote", "upvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsup:"))
+					.WithButton("Downvote", "downvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsdown:"))
+					.WithButton("Close Voting", "close-poll-dc", ButtonStyle.Danger, Emoji.Parse(":checkered_flag:"))
 			).Build()
 		);
 	}
 
-	public static EmbedBuilder createEmbed(SocketInteraction interaction, SocketMessage? message, SuggestData embedData)
+	public static EmbedBuilder createEmbed(SocketInteraction interaction, SocketMessage? message, DualChoiceData embedData)
 	{
 		var upvotes = embedData.Upvotes;
 		var downvotes = embedData.Downvotes;
 		var pollText = embedData.PollText;
 		/* ----------------- Embed Data (Based on Message Existence) ---------------- */
 		// Get avatar, name, etc. based on whether the embed has already been created
-		var userAvatar = interaction.User.GetAvatarUrl();
-		var userName = interaction.User.ToString();
-		var pollDate = interaction.CreatedAt;
-		// if message was null, expiry date won't be
+		//var userAvatar = interaction.User.GetAvatarUrl();
+		//var userName = interaction.User.ToString();
+		var pollDate = embedData.PollDate;
 		var expiryDate = embedData.ExpiryDate;
-		if (message != null) 
-		{
-			var embed = message.Embeds.ToArray()[0];
-			var embedAuthor = embed.Author.GetValueOrDefault();
-
-			userAvatar = embedAuthor.IconUrl;
-			userName = embedAuthor.Name;
-			expiryDate = embed.Fields[2].Value;
-			
-			pollDate = message.CreatedAt;
-		}
 
 		/* --------------------- Vote Percentages & Multipliers --------------------- */
 		// So that you can't divide by 0
@@ -54,9 +43,6 @@ static class DualChoiceFunctions {
 		decimal percentDownvoted = Math.Round(Convert.ToDecimal((downvotes/votesNonZero)*1000))/10;
 
 		embedData
-			.pollText(pollText)
-			.userAvatar(userAvatar)
-			.userName(userName)
 			.totalVoters(totalVoters)
 			.percentUpvoted(percentUpvoted)
 			.percentDownvoted(percentDownvoted)
@@ -109,19 +95,19 @@ static class DualChoiceFunctions {
 		return -1;
 	}
 
-	public static int votedValue(BsonDocument document, int index, short voteNum)
+	public static int votedValue(BsonDocument document, int index, VoteStyle voteType)
 	{
-		return voteValue(document, index, Convert.ToInt16(voteNum));
+		return voteValue(document, index, voteType);
 	}
 
-	public static int otherValue(BsonDocument document, int index, short voteNum)
+	public static int otherValue(BsonDocument document, int index, VoteStyle voteType)
 	{
-		return voteValue(document, index, Convert.ToInt16(1-voteNum));
+		return voteValue(document, index, 1-voteType);
 	}
 
-	public static bool userChoiceStagnant(bool? previousValue, short voteNum)
+	public static bool userChoiceStagnant(bool? previousValue, VoteStyle voteType)
 	{
-		var boolUserChoice = Convert.ToBoolean(voteNum);
+		var boolUserChoice = Convert.ToBoolean(voteType);
 		return (previousValue == boolUserChoice);
 	}
 
@@ -142,43 +128,45 @@ static class DualChoiceFunctions {
 		}
 	}
 
-	public static short voteInteger(string voteType)
+	public static string voteNumString(VoteStyle voteType)
 	{
-		short voteChosen = 0;
-		switch(voteType)
-		{
-			case "upvote-poll":
-			voteChosen = 1; // upvote
-			break;
-
-			case "downvote-poll":
-			voteChosen = 0; // downvote
-			break;
-		}
-		return voteChosen;
+		return writeStrings[(short)voteType];
 	}
 
-	public static string voteNumString(short voteNum)
+	public static string getUpdateString(int index, VoteStyle voteType)
 	{
-		return writeStrings[voteNum];
+		return $"current_polls_dualchoice.{index}.votes.{voteNumString(voteType)}";
 	}
 
-	public static string getUpdateString(int index, short voteNum)
-	{
-		return $"current_polls_dualchoice.{index}.votes.{voteNumString(voteNum)}";
-	}
-
-	public static async Task updateEmbed(BsonDocument document, int index, SocketMessageComponent messageComponent)
+	public static async Task updateEmbed(BsonDocument document, int index, bool closedVoting, SocketMessageComponent messageComponent)
 	{
 		var newVotes = document["current_polls_dualchoice"][index]["votes"];
 		int upvotes = newVotes["upvotes"].AsInt32;
 		int downvotes = newVotes["downvotes"].AsInt32;
 		
 		await messageComponent.Channel.ModifyMessageAsync(messageComponent.Message.Id, m => {
-			var embedData = new SuggestData()
+			var embedData = new DualChoiceData()
 					.upvotes(upvotes)
 					.downvotes(downvotes)
-					.pollText(document["current_polls_dualchoice"][index]["poll_text"].AsString);
+					.pollText(document["current_polls_dualchoice"][index]["poll_text"].AsString)
+					.closedVoting(closedVoting);
+			
+			/* --------------------------- Current Embed Data --------------------------- */
+			var embed = messageComponent.Message.Embeds.First();
+			var embedAuthor = embed.Author.GetValueOrDefault();
+
+			if (closedVoting) {
+				m.Components = new ComponentBuilder().Build();
+				embedData.expiryDate("Closed");
+			}
+			else {
+				embedData.expiryDate(embed.Fields[2].Value);
+			}
+			embedData.userAvatar(embedAuthor.IconUrl);
+			embedData.userName(embedAuthor.Name);
+			embedData.pollDate(messageComponent.Message.CreatedAt);
+
+			/* ------------------------------ Create Embed ------------------------------ */
 			m.Embed = createEmbed(messageComponent, messageComponent.Message, embedData).Build();
 		});
 	}
@@ -203,66 +191,77 @@ static class DualChoiceFunctions {
 		await Program.discordServersCollection.UpdateOneAsync(filter, pullInstruction);
 	}
 
-	private static int voteValue(BsonDocument document, int index, short voteNum)
+	private static int voteValue(BsonDocument document, int index, VoteStyle voteType)
 	{
-		return document["current_polls_dualchoice"][index]["votes"][writeStrings[voteNum]].ToInt32();
+		return document["current_polls_dualchoice"][index]["votes"][writeStrings[(int)voteType]].ToInt32();
 	}
 
-	private static EmbedBuilder buildEmbedWithData(SuggestData embedData)
+	private static String getBarString(int multiplier, VoteStyle style)
 	{
-		String pollText = embedData.PollText;
-		String userAvatar = embedData.UserAvatar;
-		String userName = embedData.UserName;
-		decimal totalVoters = embedData.TotalVoters;
-		decimal percentUpvoted = embedData.PercentUpvoted;
-		decimal percentDownvoted = embedData.PercentDownvoted;
-		DateTimeOffset pollDate = embedData.PollDate;
-		String expiryDate = embedData.ExpiryDate;
-
-		// Multipliers for emote percentage bars
-		int upvotedMultiplier = Convert.ToInt32(percentUpvoted/10);
-		int downvotedMultiplier = Convert.ToInt32(percentDownvoted/10);
+		String barTypeLeft;
+		String barTypeMid;
+		String barTypeRight;
+		if (style == VoteStyle.UPVOTE)
+		{
+			barTypeLeft = "<:bar_full_left:983184373258027028>";
+			barTypeMid = "<:bar_full:983184376546345030>";
+			barTypeRight = "<:bar_full_right:983184375061569536>";
+		}
+		else {
+			barTypeLeft = $"<:negativebar_full_left:983184377670402118>";
+			barTypeMid = $"<:negativebar_full:983184379947917332>";
+			barTypeRight = $"<:negativebar_full_right:983184378836422656>";
+		}
 
 		Func<int,int> numStartBars = x => Math.Min(Math.Max(0, x), 1);
 		Func<int,int> numMidBars = x => Math.Min(Math.Max(0, x-1), 8);
 		Func<int,int> numEndBars = x => Math.Max(0, x-9);
 
-		var downvoteBar = 
-			string.Concat(Enumerable.Repeat("<:negativebar_full_left:983184377670402118>", numStartBars(downvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:negativebar_full:983184379947917332>", numMidBars(downvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:negativebar_full_right:983184378836422656>", numEndBars(downvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(downvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(downvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(downvotedMultiplier)));
+		var barString = 
+			string.Concat(Enumerable.Repeat(barTypeLeft, numStartBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat(barTypeMid, numMidBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat(barTypeRight, numEndBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(multiplier)));
 
-		var upvoteBar = 
-			string.Concat(Enumerable.Repeat("<:bar_full_left:983184373258027028>", numStartBars(upvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_full:983184376546345030>", numMidBars(upvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_full_right:983184375061569536>", numEndBars(upvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(upvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(upvotedMultiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(upvotedMultiplier)));
+		return barString;
+	}
+
+	private static EmbedBuilder buildEmbedWithData(DualChoiceData embedData)
+	{
+
+		// Multipliers for emote percentage bars
+		int upvotedMultiplier = Convert.ToInt32(embedData.PercentUpvoted/10);
+		int downvotedMultiplier = Convert.ToInt32(embedData.PercentDownvoted/10);
+
+		var upvoteBar = getBarString(upvotedMultiplier, VoteStyle.UPVOTE);
+		var downvoteBar = getBarString(downvotedMultiplier, VoteStyle.DOWNVOTE);
 
 		// footer string (ex. "1 user has voted" vs "2 users have voted")
 		var footerString = " users have voted. ";
-		if (totalVoters == 1)
+		if (embedData.TotalVoters == 1)
 			footerString = " user has voted. ";
 
 		// Build final embed
 		return new EmbedBuilder()
 		.WithDescription("**———————————————**")
-		.WithFooter("\n\n"+totalVoters+footerString)
-		.AddField("Poll", pollText)
-			.WithColor(Discord.Color.Gold)
+		.WithFooter("\n\n"+embedData.TotalVoters+footerString)
+		.AddField("Poll", embedData.PollText)
 			.WithAuthor(new EmbedAuthorBuilder()
-				.WithIconUrl(userAvatar)
-				.WithName(userName)
+				.WithIconUrl(embedData.UserAvatar)
+				.WithName(embedData.UserName)
 			)
-			.WithTimestamp(pollDate)
+			.WithTimestamp(embedData.PollDate)
 		.AddField("Stats", 
-			$"{upvoteBar}\n**{percentUpvoted}%** Upvoted"+ 
-			$"\n{downvoteBar}\n**{percentDownvoted}%** Downvoted"
+			$"{upvoteBar}\n**{embedData.PercentUpvoted}%** Upvoted"+ 
+			$"\n{downvoteBar}\n**{embedData.PercentDownvoted}%** Downvoted"
 		)
-		.AddField("Expires On", expiryDate);
+		.AddField("Expiry Status", embedData.ExpiryDate);
 	}
+}
+
+enum VoteStyle {
+	DOWNVOTE,
+	UPVOTE
 }

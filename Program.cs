@@ -98,6 +98,11 @@ namespace TicketBox
 			return Builders<BsonDocument>.Filter.Eq("server_id", guildId);
 		}
 
+		public static BsonDocument getServerDocument(IMongoCollection<BsonDocument> collection, ulong serverId)
+		{
+			return collection.Find(Program.serverIDFilter(serverId)).ToList()[0];
+		}
+
 		private async Task client_ready()
 		{
 			var guild = client.GetGuild(837935655258554388);
@@ -211,19 +216,30 @@ namespace TicketBox
 		{
 			switch (messageComponent.Data.CustomId)
 			{
-				case "upvote-poll" or "downvote-poll":
-				try
-				{
-					await ButtonHandlers.VoteButton(messageComponent, messageComponent.Data.CustomId);
-				}
-				catch(Discord.Net.HttpException e)
-				{
-					if (e.DiscordCode != DiscordErrorCode.CannotSendEmptyMessage)
+				case "upvote-poll-dc":
+					try
 					{
-						// code for discarding "cannot send an empty message" error
+						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.UPVOTE);
 					}
-				}
-				break;
+					catch(Discord.Net.HttpException) { }
+					break;
+
+				case "downvote-poll-dc":
+					try
+					{
+						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.DOWNVOTE);
+					}
+					catch(Discord.Net.HttpException) { }
+					break;
+
+				case "close-poll-dc":
+					var permissions = ((SocketGuildUser) messageComponent.User).GuildPermissions;
+					if (permissions.ManageMessages || permissions.Administrator)
+						await ButtonHandlers.CloseDCPoll(discordServersCollection, messageComponent);
+					else {
+						await messageComponent.RespondAsync("You don't have the permissions to do this!", ephemeral: true);
+					}
+					break;
 			}
 		}
 	}
