@@ -166,12 +166,12 @@ static class DualChoiceFunctions {
 			).Build();
 	}
 
-	public static async Task removePollData(IMongoCollection<BsonDocument> collection, MessageScope messageScope)
+	public static async Task removePollData(IMongoCollection<BsonDocument> collection, MessageScope scopeSM)
 	{
-		var serverId = messageScope.ServerID;
-		var messageId = messageScope.MessageID;
+		var serverId = scopeSM.ServerID;
+		var messageId = scopeSM.MessageID;
 
-		var filter = Program.serverIDFilter(serverId);
+		var filter = DocumentFunctions.serverIDFilter(serverId);
 		var document = Program.discordServersCollection.Find(filter).ToList()[0];
 		var dualChoicePolls = document["current_polls_dualchoice"];
 		int index = DualChoiceFunctions.indexOfPoll(dualChoicePolls.AsBsonArray, messageId);

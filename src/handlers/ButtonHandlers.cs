@@ -12,7 +12,7 @@ static class ButtonHandlers {
 		var message = messageComponent.Message;
 		// Filter for server document
 		var serverId = messageComponent.GuildId.GetValueOrDefault();
-		var filter = Program.serverIDFilter(serverId);
+		var filter = DocumentFunctions.serverIDFilter(serverId);
 		var document = collection.Find(filter).ToList()[0];
 		/* --------------------------- Index of Poll -------------------------- */
 		// Get all polls, find the index of the poll based on message.Id
@@ -92,16 +92,16 @@ static class ButtonHandlers {
 
 	//* THESE TWO FUNCTIONS BELOW DO NOT RESPOND TO BUTTONS
 	// though they are related to the button handler above
-	public static async Task ExpireDCPoll(IMongoCollection<BsonDocument> collection, MessageScope messageScope)
+	public static async Task ExpireDCPoll(IMongoCollection<BsonDocument> collection, MessageScope scopeSCM)
 	{
-		await TerminateDCPoll(collection, messageScope, "Expired");
+		await TerminateDCPoll(collection, scopeSCM, "Expired");
 	}
-	private static async Task TerminateDCPoll(IMongoCollection<BsonDocument> collection, MessageScope messageScope, String expiryString)
+	private static async Task TerminateDCPoll(IMongoCollection<BsonDocument> collection, MessageScope scopeSCM, String expiryString)
 	{
-		var serverId = messageScope.ServerID;
-		var messageId = messageScope.MessageID;
+		var serverId = scopeSCM.ServerID;
+		var messageId = scopeSCM.MessageID;
 
-		var channel = (ISocketMessageChannel) Program.client.GetGuild(serverId).GetChannel(messageScope.ChannelID);
+		var channel = (ISocketMessageChannel) Program.client.GetGuild(serverId).GetChannel(scopeSCM.ChannelID);
 		var message = await channel.GetMessageAsync(messageId);
 
 		var document = Program.getServerDocument(collection, serverId);
@@ -112,7 +112,7 @@ static class ButtonHandlers {
 		var data = new DualChoiceData(pollVotes["upvotes"].AsInt32, pollVotes["downvotes"].AsInt32, poll["poll_text"].AsString, true)
 			.expiryString(expiryString);
 
-		await DualChoiceFunctions.updateEmbed(index, messageScope, data);
-		await DualChoiceFunctions.removePollData(collection, messageScope);
+		await DualChoiceFunctions.updateEmbed(index, scopeSCM, data);
+		await DualChoiceFunctions.removePollData(collection, scopeSCM);
 	}
 }

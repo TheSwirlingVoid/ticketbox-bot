@@ -55,7 +55,6 @@ namespace TicketBox
 		{
 			var messageScope = new MessageScope()
 				.serverId(((SocketGuildChannel) channel.Value).Guild.Id)
-				.channelId(channel.Id)
 				.messageId(message.Id);
 
 			await DualChoiceFunctions.removePollData(discordServersCollection, messageScope);
@@ -88,12 +87,12 @@ namespace TicketBox
 								var channel = server.GetTextChannel(channelId);
 								var message = await channel.GetMessageAsync(messageId);
 								// expire the poll
-								var messageScope = new MessageScope()
+								var scopeSCM = new MessageScope()
 									.serverId(serverId)
 									.channelId(channel.Id)
 									.messageId(messageId);
 								
-								await ButtonHandlers.ExpireDCPoll(discordServersCollection, messageScope);
+								await ButtonHandlers.ExpireDCPoll(discordServersCollection, scopeSCM);
 							}
 						}
 					}
@@ -109,19 +108,17 @@ namespace TicketBox
 			return Task.CompletedTask;
 		}
 
-		public static FilterDefinition<BsonDocument> serverIDFilter(ulong guildId)
-		{
-			return Builders<BsonDocument>.Filter.Eq("server_id", guildId);
-		}
+		
 
 		public static BsonDocument getServerDocument(IMongoCollection<BsonDocument> collection, ulong serverId)
 		{
-			return collection.Find(Program.serverIDFilter(serverId)).ToList()[0];
+			return collection.Find(DocumentFunctions.serverIDFilter(serverId)).ToList()[0];
 		}
 
 		private async Task ClientReady()
 		{
-			var guild = client.GetGuild(837935655258554388);
+			// my very good server!
+			var celestialCentral = client.GetGuild(837935655258554388);
 
 			/* -------------------------------- Commands -------------------------------- */
 			List<ApplicationCommandProperties> commands = new();
@@ -146,7 +143,7 @@ namespace TicketBox
 			try 
 			{	
 				// SLASH COMMAND CREATION
-				await guild.BulkOverwriteApplicationCommandAsync(commands.ToArray());
+				await celestialCentral.BulkOverwriteApplicationCommandAsync(commands.ToArray());
 
 				//* GLOBAL COMMANDS–OMIT WHEN TESTING
 				//await client.BulkOverwriteGlobalApplicationCommandsAsync(commands.ToArray());
@@ -155,7 +152,8 @@ namespace TicketBox
 			{
 				Console.WriteLine(e.ToString());
 			}
-			/* -------------------------------------------------------------------------- */
+			/* -------------------------- Add Missing Documents ------------------------- */
+			await StartupFunctions.addMissingDocs(discordServersCollection);
 		}
 
 		public async Task statusUpdater(int minutesToChange)
@@ -209,28 +207,16 @@ namespace TicketBox
 
 		private async Task JoinedGuild(SocketGuild guild)
 		{
-			// If this server does not have its own document already
-			if (discordServersCollection.Find(serverIDFilter(guild.Id)).CountDocuments() == 0)
-			{
-				// Create the base BSON Document
-				BsonDocument newServerDocument = new BsonDocument
-				{
-					{ "server_id", BsonValue.Create(guild.Id) },
-					{ "server_name", guild.Name },
-					{ "bot_options", 
-						new BsonDocument { 
-							// {"show_votes", true} 
-						}
-					},
-					{ "current_polls_dualchoice", new BsonArray {} }
-				};
-				await discordServersCollection.InsertOneAsync(newServerDocument);
-			}
+			// Create the server's document
+			await JoinFunctions.createServerDocument(discordServersCollection, 
+				new MessageScope()
+					.serverId(guild.Id)
+			);
 		}
 
 		private async Task LeftGuild(SocketGuild guild)
 		{
-			var filter = serverIDFilter(guild.Id);
+			var filter = DocumentFunctions.serverIDFilter(guild.Id);
 			await discordServersCollection.DeleteManyAsync(filter);
 		}
 
