@@ -16,8 +16,10 @@ static class JoinFunctions {
 				{ "server_id", BsonValue.Create(guildID) },
 				{ "server_name", guildName },
 				{ "bot_options", 
-					new BsonDocument { 
-						// {"show_votes", true} 
+					new BsonDocument {
+						//* [UPDATE OPTIONS] 
+						{"expiry_days", 7},
+						{"create_threads", true}
 					}
 				},
 				{ "current_polls_dualchoice", new BsonArray {} }

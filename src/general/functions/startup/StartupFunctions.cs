@@ -13,6 +13,7 @@ static class StartupFunctions {
 				var scopeS = new MessageScope()
 					.serverId(guild.Id);
 				await JoinFunctions.createServerDocument(collection, scopeS);
+				Console.WriteLine($"Joined {guild.Name}");
 			}
 		}
 	}

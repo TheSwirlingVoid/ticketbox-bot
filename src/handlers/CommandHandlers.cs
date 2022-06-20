@@ -38,6 +38,7 @@ static class CommandHandlers {
 		var commandParameters = subCommand.Options.ToArray();
 
 		// this will be the validated value of the user input
+		/* ---------------------------- Value Validation ---------------------------- */
 		BsonValue validated;
 		var successfulValidation = CommandFunctions.validateValue(subCommandName, commandParameters[0], out validated);
 		if (!successfulValidation)
@@ -47,9 +48,11 @@ static class CommandHandlers {
 			return;
 		}
 
+		/* ------------------------- Permission Verification ------------------------ */
 		if (permissions.Administrator)
 		{
 			var setting = subCommandName;
+			/* ------------------------------ Value Change ------------------------------ */
 			await CommandHandlers.changeOption(
 						docCollection,
 						(string)subCommandName, 

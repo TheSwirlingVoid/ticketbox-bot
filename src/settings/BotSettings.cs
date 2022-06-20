@@ -14,6 +14,7 @@ class BotSettings {
 	{
 		var docSettings = serverDoc["bot_options"];
 		return new BotSettings()
+			//* [UPDATE OPTIONS]
 			.expiryDays(docSettings["expiry_days"].AsInt32)
 			.createThreads(docSettings["create_threads"].AsBoolean);
 	}
