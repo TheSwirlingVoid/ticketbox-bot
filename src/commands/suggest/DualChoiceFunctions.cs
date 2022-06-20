@@ -12,28 +12,15 @@ static class DualChoiceFunctions {
 		// but won't finish its response.
 		await originalCommand.DeferAsync();
 		// Follow up the deferrance with a final message response
-		return await originalCommand.FollowupAsync(embed: messageEmbedBuilder.Build(), components: 
-			new ComponentBuilder()
-			.AddRow(
-				new ActionRowBuilder()
-					.WithButton("Upvote", "upvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsup:"))
-					.WithButton("Downvote", "downvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsdown:"))
-					.WithButton("Close Voting", "close-poll-dc", ButtonStyle.Danger, Emoji.Parse(":checkered_flag:"))
-			).Build()
-		);
+		return await originalCommand.FollowupAsync(embed: messageEmbedBuilder.Build(), components: getButtons(false));
 	}
 
-	public static EmbedBuilder createEmbed(SocketInteraction interaction, SocketMessage? message, DualChoiceData embedData)
+	public static EmbedBuilder createEmbed(IMessage? message, DualChoiceData embedData)
 	{
 		var upvotes = embedData.Upvotes;
 		var downvotes = embedData.Downvotes;
 		var pollText = embedData.PollText;
-		/* ----------------- Embed Data (Based on Message Existence) ---------------- */
-		// Get avatar, name, etc. based on whether the embed has already been created
-		//var userAvatar = interaction.User.GetAvatarUrl();
-		//var userName = interaction.User.ToString();
 		var pollDate = embedData.PollDate;
-		var expiryDate = embedData.ExpiryDate;
 
 		/* --------------------- Vote Percentages & Multipliers --------------------- */
 		// So that you can't divide by 0
@@ -46,19 +33,16 @@ static class DualChoiceFunctions {
 			.totalVoters(totalVoters)
 			.percentUpvoted(percentUpvoted)
 			.percentDownvoted(percentDownvoted)
-			.pollDate(pollDate)
-			.expiryDate(expiryDate);
+			.pollDate(pollDate);
 
 		// Return the embed build with the data above
 		return buildEmbedWithData(embedData);
 	}
 
-	public static void saveInitialPoll(IMongoCollection<BsonDocument> collection, ulong guildId, SocketSlashCommand command, ulong messageId, string pollText, long expiryTime)
+	public static void saveInitialPoll(IMongoCollection<BsonDocument> collection, SocketSlashCommand command, ulong messageId, string pollText, long expiryTime)
 	{
-		// Find the document by filtering by server ID
-		var serverFilter = Program.serverIDFilter(guildId);
 		// Get the server's mongoDB Document
-		var serverDocument = collection.Find(serverFilter).ToList()[0];
+		var serverDocument = Program.getServerDocument(collection, command.GuildId.GetValueOrDefault());
 
 		// Prepare the structured data for the document's poll list
 		BsonDocument pollDocument = new BsonDocument
@@ -138,41 +122,55 @@ static class DualChoiceFunctions {
 		return $"current_polls_dualchoice.{index}.votes.{voteNumString(voteType)}";
 	}
 
-	public static async Task updateEmbed(BsonDocument document, int index, bool closedVoting, SocketMessageComponent messageComponent)
+	public static async Task updateEmbed(int index, MessageScope messageScope, DualChoiceData data)
 	{
-		var newVotes = document["current_polls_dualchoice"][index]["votes"];
-		int upvotes = newVotes["upvotes"].AsInt32;
-		int downvotes = newVotes["downvotes"].AsInt32;
-		
-		await messageComponent.Channel.ModifyMessageAsync(messageComponent.Message.Id, m => {
-			var embedData = new DualChoiceData()
-					.upvotes(upvotes)
-					.downvotes(downvotes)
-					.pollText(document["current_polls_dualchoice"][index]["poll_text"].AsString)
-					.closedVoting(closedVoting);
+		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
+		var message = await channel.GetMessageAsync(messageScope.MessageID);
+
+		await channel.ModifyMessageAsync(message.Id, m => {
 			
 			/* --------------------------- Current Embed Data --------------------------- */
-			var embed = messageComponent.Message.Embeds.First();
+			var embed = message.Embeds.First();
 			var embedAuthor = embed.Author.GetValueOrDefault();
 
-			if (closedVoting) {
-				m.Components = new ComponentBuilder().Build();
-				embedData.expiryDate("Closed");
+			if (data.ClosedVoting)
+			{
+				m.Components = getButtons(true);
 			}
-			else {
-				embedData.expiryDate(embed.Fields[2].Value);
+			// default expiry string (the date format)
+			if (data.ExpiryString == "") {
+				data.expiryString(embed.Fields[2].Value);
 			}
-			embedData.userAvatar(embedAuthor.IconUrl);
-			embedData.userName(embedAuthor.Name);
-			embedData.pollDate(messageComponent.Message.CreatedAt);
+
+			data
+				.userAvatar(embedAuthor.IconUrl)
+				.userName(embedAuthor.Name)
+				.pollDate(message.CreatedAt);
 
 			/* ------------------------------ Create Embed ------------------------------ */
-			m.Embed = createEmbed(messageComponent, messageComponent.Message, embedData).Build();
+			m.Embed = createEmbed(message, data).Build();
 		});
 	}
 
-	public static async Task removePollData(IMongoCollection<BsonDocument> collection, ulong messageId, ulong serverId)
+	private static MessageComponent getButtons(bool disabled)
 	{
+		return new ComponentBuilder()
+			.AddRow(
+				new ActionRowBuilder()
+					.WithButton("Upvote", "upvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsup:"), disabled: disabled)
+					.WithButton("Downvote", "downvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsdown:"), disabled: disabled)
+			)
+			.AddRow(
+				new ActionRowBuilder()
+					.WithButton("Close Voting", "close-poll-dc", ButtonStyle.Danger, Emoji.Parse(":checkered_flag:"), disabled: disabled)
+			).Build();
+	}
+
+	public static async Task removePollData(IMongoCollection<BsonDocument> collection, MessageScope messageScope)
+	{
+		var serverId = messageScope.ServerID;
+		var messageId = messageScope.MessageID;
+
 		var filter = Program.serverIDFilter(serverId);
 		var document = Program.discordServersCollection.Find(filter).ToList()[0];
 		var dualChoicePolls = document["current_polls_dualchoice"];
@@ -245,19 +243,19 @@ static class DualChoiceFunctions {
 
 		// Build final embed
 		return new EmbedBuilder()
-		.WithDescription("**———————————————**")
-		.WithFooter("\n\n"+embedData.TotalVoters+footerString)
-		.AddField("Poll", embedData.PollText)
-			.WithAuthor(new EmbedAuthorBuilder()
-				.WithIconUrl(embedData.UserAvatar)
-				.WithName(embedData.UserName)
-			)
+			.WithDescription("**———————————————**")
+			.WithFooter("\n\n"+embedData.TotalVoters+footerString)
 			.WithTimestamp(embedData.PollDate)
-		.AddField("Stats", 
-			$"{upvoteBar}\n**{embedData.PercentUpvoted}%** Upvoted"+ 
-			$"\n{downvoteBar}\n**{embedData.PercentDownvoted}%** Downvoted"
-		)
-		.AddField("Expiry Status", embedData.ExpiryDate);
+			.AddField("Poll", $"{embedData.PollText}")
+				.WithAuthor(new EmbedAuthorBuilder()
+					.WithIconUrl(embedData.UserAvatar)
+					.WithName(embedData.UserName)
+				)
+			.AddField("Stats", 
+				$"{upvoteBar}\n**{embedData.PercentUpvoted}%** Upvoted"+ 
+				$"\n{downvoteBar}\n**{embedData.PercentDownvoted}%** Downvoted"
+			)
+			.AddField("Expiry Status", embedData.ExpiryString);
 	}
 }
 

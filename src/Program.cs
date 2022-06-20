@@ -19,13 +19,14 @@ namespace TicketBox
 		public static MongoClient mongoClient = new MongoClient(connectionString);
 		public static IMongoDatabase database = mongoClient.GetDatabase("ticketbox-bot");
 		public static IMongoCollection<BsonDocument> discordServersCollection = database.GetCollection<BsonDocument>("DiscordServers");
-		
+
 		public async Task MainAsync()
 		{
 
 			client.Log += Log; // add the log function to handle log events
-			client.Ready += client_ready;
+			client.Ready += ClientReady;
 			client.JoinedGuild += JoinedGuild;
+			client.LeftGuild += LeftGuild;
 
 			client.SlashCommandExecuted += SlashCommandHandler;
 			client.ButtonExecuted += ButtonExecuted;
@@ -40,9 +41,11 @@ namespace TicketBox
 
 			// Wait until program is closed
 			await client.SetStatusAsync(UserStatus.Online);
-			await statusUpdater();
 
-			await expiredPollDeleter(discordServersCollection);
+			// ignore these warnings–these functions need to run concurrently
+			statusUpdater(60);
+
+			expiredPollDeleter(discordServersCollection, TimeSpan.FromHours(1));
 
 			await Task.Delay(-1);
 
@@ -50,40 +53,53 @@ namespace TicketBox
 
 		private async Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
 		{
-			await DualChoiceFunctions.removePollData(discordServersCollection, message.Id, ((SocketGuildChannel) channel.Value).Guild.Id);
+			var messageScope = new MessageScope()
+				.serverId(((SocketGuildChannel) channel.Value).Guild.Id)
+				.channelId(channel.Id)
+				.messageId(message.Id);
+
+			await DualChoiceFunctions.removePollData(discordServersCollection, messageScope);
 		}
 
-		public static async Task expiredPollDeleter(IMongoCollection<BsonDocument> collection)
+		public static async Task expiredPollDeleter(IMongoCollection<BsonDocument> collection, TimeSpan timeSpan)
 		{
 			while (true)
 			{
 				long unixTimeNow = DateTimeOffset.Now.ToUnixTimeSeconds();
-				var timeFilter = Builders<BsonDocument>.Filter.Gte("unix_expiry_time", unixTimeNow);
+				var timeFilter = Builders<BsonDocument>.Filter.Lte("current_polls_dualchoice.unix_expiry_time", unixTimeNow);
 				var documents = collection.Find(timeFilter).ToList();
 				// foreach DOCUMENT
 				foreach (var document in documents)
 				{
 					// foreach of its POLLS
 					var polls_DC = document["current_polls_dualchoice"].AsBsonArray.ToList();
-					for (int index = 0; index > polls_DC.Count; index++)
+					for (int index = 0; index < polls_DC.Count; index++)
 					{
 						var poll = polls_DC[index];
 						var expiryTime = poll["unix_expiry_time"];
-						if (expiryTime == unixTimeNow)
+						if (unixTimeNow >= expiryTime)
 						{
 							ulong serverId = (ulong) document["server_id"].AsInt64;
-							ulong channelId = (ulong) poll["channel_id"].AsInt64;
-							ulong messageId = (ulong) poll["message_id"].AsInt64;
-							// delete the message
-							await ((ISocketMessageChannel) client.GetGuild(serverId).GetChannel(channelId)).DeleteMessageAsync(messageId);
-							// remove it from MongoDB
-							await DualChoiceFunctions.removePollData(document, index);
+							var server = client.GetGuild(serverId);
+							if (client.Guilds.Contains(server))
+							{
+								ulong channelId = (ulong) poll["channel_id"].AsInt64;
+								ulong messageId = (ulong) poll["message_id"].AsInt64;
+								var channel = server.GetTextChannel(channelId);
+								var message = await channel.GetMessageAsync(messageId);
+								// expire the poll
+								var messageScope = new MessageScope()
+									.serverId(serverId)
+									.channelId(channel.Id)
+									.messageId(messageId);
+								
+								await ButtonHandlers.ExpireDCPoll(discordServersCollection, messageScope);
+							}
 						}
 					}
 				}
-
 				// checks every hour
-				await Task.Delay(TimeSpan.FromHours(1));
+				await Task.Delay(timeSpan);
 			}
 		}
 
@@ -103,7 +119,7 @@ namespace TicketBox
 			return collection.Find(Program.serverIDFilter(serverId)).ToList()[0];
 		}
 
-		private async Task client_ready()
+		private async Task ClientReady()
 		{
 			var guild = client.GetGuild(837935655258554388);
 
@@ -132,8 +148,8 @@ namespace TicketBox
 				// SLASH COMMAND CREATION
 				await guild.BulkOverwriteApplicationCommandAsync(commands.ToArray());
 
-				//* CLEAR GLOBAL CMDS FOR NOW, TRANSFER LATER
-				await client.BulkOverwriteGlobalApplicationCommandsAsync(commands.ToArray());
+				//* GLOBAL COMMANDS–OMIT WHEN TESTING
+				//await client.BulkOverwriteGlobalApplicationCommandsAsync(commands.ToArray());
 			}
 			catch (Exception e)
 			{
@@ -142,7 +158,7 @@ namespace TicketBox
 			/* -------------------------------------------------------------------------- */
 		}
 
-		public async Task statusUpdater()
+		public async Task statusUpdater(int minutesToChange)
 		{
 			var filename = "statuses.txt";
 			while (true)
@@ -158,7 +174,7 @@ namespace TicketBox
 				}
 				var status = await sr.ReadLineAsync();
 				await client.SetGameAsync(status, null, ActivityType.Playing);
-				await Task.Delay(TimeSpan.FromMinutes(5));
+				await Task.Delay(TimeSpan.FromMinutes(minutesToChange));
 			}
 		}
 
@@ -212,6 +228,12 @@ namespace TicketBox
 			}
 		}
 
+		private async Task LeftGuild(SocketGuild guild)
+		{
+			var filter = serverIDFilter(guild.Id);
+			await discordServersCollection.DeleteManyAsync(filter);
+		}
+
 		private async Task ButtonExecuted(SocketMessageComponent messageComponent)
 		{
 			switch (messageComponent.Data.CustomId)
@@ -237,7 +259,7 @@ namespace TicketBox
 					if (permissions.ManageMessages || permissions.Administrator)
 						await ButtonHandlers.CloseDCPoll(discordServersCollection, messageComponent);
 					else {
-						await messageComponent.RespondAsync("You don't have the permissions to do this!", ephemeral: true);
+						await messageComponent.RespondAsync("You need the **Manage Messages** permission or need to be an **Administrator** to close polls!", ephemeral: true);
 					}
 					break;
 			}

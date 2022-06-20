@@ -8,15 +8,19 @@ class DualChoiceData {
 	public decimal Upvotes { get; private set;}
 	public decimal Downvotes { get; private set;}
 	public DateTimeOffset PollDate { get; private set;}
-	public String ExpiryDate { get; private set;}
+	public String ExpiryString { get; private set;}
 	public bool ClosedVoting { get; private set;}
 
-	public DualChoiceData()
+	public DualChoiceData(decimal upvotes, decimal downvotes, String pollText, bool closedVoting)
 	{
-		PollText = "";
 		UserAvatar = "";
 		UserName = "";
-		ExpiryDate = "";
+		ExpiryString = "";
+
+		Upvotes = upvotes;
+		Downvotes = downvotes;
+		PollText = pollText;
+		ClosedVoting = closedVoting;
 	}
 
 	public DualChoiceData pollText(string newText)
@@ -64,9 +68,9 @@ class DualChoiceData {
 		PollDate = pollDate;
 		return this;
 	}
-	public DualChoiceData expiryDate(String expiryDate)
+	public DualChoiceData expiryString(String expiryDate)
 	{
-		ExpiryDate = expiryDate;
+		ExpiryString = expiryDate;
 		return this;
 	}
 	public DualChoiceData closedVoting(bool closedVoting)
