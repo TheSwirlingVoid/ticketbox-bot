@@ -6,6 +6,6 @@ Give your users the ability to create modern & clean voting polls, questions, or
 
 <h2>Invite Link</h2>
 
-https://discord.com/api/oauth2/authorize?client_id=982090453551816735&permissions=8&scope=applications.commands%20bot
+https://bit.ly/39D33vT
 
 This bot is <strong>in development</strong>. While things are subject to change and while this bot might not be running/online 100% of the time, sufficient functionality exists if you'd like to use it!
