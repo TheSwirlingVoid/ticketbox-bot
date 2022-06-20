@@ -6,6 +6,6 @@ Give your users the ability to create modern & clean voting polls, questions, or
 
 <h2>Invite This Bot!</h2>
 
-[<h3>Link</h3>](https://bit.ly/39D33vT)
+[Invite Link](https://bit.ly/39D33vT)
 
 This bot is <strong>in development</strong>. While things are subject to change and while this bot might not be running/online 100% of the time, sufficient functionality exists if you'd like to use it!
