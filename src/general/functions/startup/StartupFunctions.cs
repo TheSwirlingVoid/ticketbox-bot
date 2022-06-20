@@ -8,7 +8,7 @@ static class StartupFunctions {
 		foreach (var guild in Program.client.Guilds)
 		{
 			// if the server doc doesn't exist
-			if (!(await DocumentFunctions.serverDocExists(collection, guild.Id)))
+			if (!DocumentFunctions.serverDocExists(collection, guild.Id))
 			{
 				var scopeS = new MessageScope()
 					.serverId(guild.Id);

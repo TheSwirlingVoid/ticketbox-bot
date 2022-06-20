@@ -6,13 +6,13 @@ using TicketBox;
 
 static class DualChoiceFunctions {
 	private static string[] writeStrings = {"downvotes", "upvotes"};
-	public static async Task<Discord.Rest.RestFollowupMessage> createMessage(SocketSlashCommand originalCommand, EmbedBuilder messageEmbedBuilder)
+	public static async Task<Discord.Rest.RestFollowupMessage> createMessage(SocketSlashCommand command, EmbedBuilder messageEmbedBuilder)
 	{
 		// Defer the response, meaning the bot will recognize that the command was sent
 		// but won't finish its response.
-		await originalCommand.DeferAsync();
+		await command.DeferAsync();
 		// Follow up the deferrance with a final message response
-		return await originalCommand.FollowupAsync(embed: messageEmbedBuilder.Build(), components: getButtons(false));
+		return await command.FollowupAsync(embed: messageEmbedBuilder.Build(), components: createButtons(false));
 	}
 
 	public static EmbedBuilder createEmbed(IMessage? message, DualChoiceData embedData)
@@ -39,28 +39,25 @@ static class DualChoiceFunctions {
 		return buildEmbedWithData(embedData);
 	}
 
-	public static void saveInitialPoll(IMongoCollection<BsonDocument> collection, SocketSlashCommand command, ulong messageId, string pollText, long expiryTime)
+	public static void saveInitialPoll(BsonDocument document, IMongoCollection<BsonDocument> collection, SocketSlashCommand command, BaseDocumentData baseData)
 	{
-		// Get the server's mongoDB Document
-		var serverDocument = Program.getServerDocument(collection, command.GuildId.GetValueOrDefault());
-
 		// Prepare the structured data for the document's poll list
 		BsonDocument pollDocument = new BsonDocument
 		{
 			{ "user_id", BsonValue.Create(command.User.Id) },
-			{ "poll_text", pollText },
+			{ "poll_text", baseData.PollText },
 			{ "votes", new BsonDocument {
 				{ "upvotes", 0 },
 				{ "downvotes", 0 },
 				{ "voters", new BsonDocument {} }
 			} },
-			{ "message_id", BsonValue.Create(messageId) },
+			{ "message_id", BsonValue.Create(baseData.MessageID) },
 			{ "channel_id", BsonValue.Create(command.Channel.Id) },
-			{ "unix_expiry_time", expiryTime }
+			{ "unix_expiry_time", baseData.ExpiryTime }
 		};
 
 		// Update the document with new data
-		Program.discordServersCollection.UpdateOne(serverDocument, Builders<BsonDocument>.Update.AddToSet("current_polls_dualchoice", pollDocument));
+		Program.discordServersCollection.UpdateOne(document, Builders<BsonDocument>.Update.AddToSet("current_polls_dualchoice", pollDocument));
 	}
 
 	public static int indexOfPoll(BsonArray currentPolls, ulong messageId)
@@ -135,7 +132,7 @@ static class DualChoiceFunctions {
 
 			if (data.ClosedVoting)
 			{
-				m.Components = getButtons(true);
+				m.Components = createButtons(true);
 			}
 			// default expiry string (the date format)
 			if (data.ExpiryString == "") {
@@ -152,7 +149,7 @@ static class DualChoiceFunctions {
 		});
 	}
 
-	private static MessageComponent getButtons(bool disabled)
+	private static MessageComponent createButtons(bool disabled)
 	{
 		return new ComponentBuilder()
 			.AddRow(

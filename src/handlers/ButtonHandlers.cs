@@ -104,7 +104,7 @@ static class ButtonHandlers {
 		var channel = (ISocketMessageChannel) Program.client.GetGuild(serverId).GetChannel(scopeSCM.ChannelID);
 		var message = await channel.GetMessageAsync(messageId);
 
-		var document = Program.getServerDocument(collection, serverId);
+		var document = DocumentFunctions.getServerDocument(collection, serverId);
 		var index = DualChoiceFunctions.indexOfPoll(document["current_polls_dualchoice"].AsBsonArray, messageId);
 		var poll = document["current_polls_dualchoice"][index];
 		var pollVotes = poll["votes"];

@@ -108,13 +108,6 @@ namespace TicketBox
 			return Task.CompletedTask;
 		}
 
-		
-
-		public static BsonDocument getServerDocument(IMongoCollection<BsonDocument> collection, ulong serverId)
-		{
-			return collection.Find(DocumentFunctions.serverIDFilter(serverId)).ToList()[0];
-		}
-
 		private async Task ClientReady()
 		{
 			// my very good server!
@@ -139,6 +132,34 @@ namespace TicketBox
 					)
 				).Build();
 			commands.Add(pollDC_command);
+
+			var settings_command = new SlashCommandBuilder()
+				.WithName(BotCommands.SETTINGS)
+				.WithDescription("Change the bot's settings for this server!")
+				.AddOption(new SlashCommandOptionBuilder()
+					.WithName("expiry_days")
+					.WithDescription("Change the amount of days for a poll to expire!")
+					.WithType(ApplicationCommandOptionType.SubCommand)
+					.AddOption(new SlashCommandOptionBuilder()
+						.WithName("days")
+						.WithDescription("Days before a poll expires")
+						.WithType(ApplicationCommandOptionType.Integer)
+						.WithRequired(true)
+					)
+				)
+				.AddOption(new SlashCommandOptionBuilder()
+					.WithName("create_threads")
+					.WithDescription("Change whether poll discussion threads should be created!")
+					.WithType(ApplicationCommandOptionType.SubCommand)
+					.AddOption(new SlashCommandOptionBuilder()
+						.WithName("threads_enabled")
+						.WithDescription("Threads enabled")
+						.WithType(ApplicationCommandOptionType.Boolean)
+						.WithRequired(true)
+					)
+				)
+				.Build();
+			commands.Add(settings_command);
 			/* -------------------------- Commmand Registering -------------------------- */
 			try 
 			{	
@@ -190,17 +211,37 @@ namespace TicketBox
 
 		private async Task SlashCommandHandler(SocketSlashCommand command)
 		{
+
 			var options = command.Data.Options.ToArray();
+			var serverDoc = DocumentFunctions.getServerDocument(discordServersCollection, command.GuildId.GetValueOrDefault());
+			var settings = BotSettings.getServerSettings(serverDoc);
+
+			// get the subCommand
+			var subCommand = options.First();
+			var subCommandName = subCommand.Name;
+			var commandParameters = subCommand.Options.ToArray();
+
+			// permissions—for commands
+			var permissions = ((SocketGuildUser) command.User).GuildPermissions;
+
 			switch(command.CommandName)
 			{
 				case "poll":
-				var firstOption = options.First();
-				switch (firstOption.Name)
-				{
-					case "dualchoice":
-					await CommandHandlers.PollDualChoiceCommand(command, (string)firstOption.Options.First().Value);
-					break;
-				}
+					switch (subCommandName)
+					{
+						case "dualchoice":
+							await CommandHandlers.PollDualChoiceCommand(serverDoc, command, settings, (string)commandParameters[0].Value);
+						break;
+					}
+				break;
+
+				case "settings":
+					await CommandHandlers.SettingsCommand(
+						new DocumentWithCollection(discordServersCollection, serverDoc),
+						command,
+						options,
+						permissions
+					);
 				break;
 			}
 		}
@@ -230,7 +271,7 @@ namespace TicketBox
 						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.UPVOTE);
 					}
 					catch(Discord.Net.HttpException) { }
-					break;
+				break;
 
 				case "downvote-poll-dc":
 					try
@@ -238,7 +279,7 @@ namespace TicketBox
 						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.DOWNVOTE);
 					}
 					catch(Discord.Net.HttpException) { }
-					break;
+				break;
 
 				case "close-poll-dc":
 					var permissions = ((SocketGuildUser) messageComponent.User).GuildPermissions;
@@ -247,7 +288,7 @@ namespace TicketBox
 					else {
 						await messageComponent.RespondAsync("You need the **Manage Messages** permission or need to be an **Administrator** to close polls!", ephemeral: true);
 					}
-					break;
+				break;
 			}
 		}
 	}
