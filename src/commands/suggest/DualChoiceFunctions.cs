@@ -76,16 +76,6 @@ static class DualChoiceFunctions {
 		return -1;
 	}
 
-	public static int votedValue(BsonDocument document, int index, VoteStyle voteType)
-	{
-		return voteValue(document, index, voteType);
-	}
-
-	public static int otherValue(BsonDocument document, int index, VoteStyle voteType)
-	{
-		return voteValue(document, index, 1-voteType);
-	}
-
 	public static bool userChoiceStagnant(bool? previousValue, VoteStyle voteType)
 	{
 		var boolUserChoice = Convert.ToBoolean(voteType);
@@ -119,10 +109,10 @@ static class DualChoiceFunctions {
 		return $"current_polls_dualchoice.{index}.votes.{voteNumString(voteType)}";
 	}
 
-	public static async Task updateEmbed(int index, MessageScope messageScope, DualChoiceData data)
+	public static async Task updateEmbed(int index, MessageScope scopeCM, DualChoiceData data)
 	{
-		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
-		var message = await channel.GetMessageAsync(messageScope.MessageID);
+		var channel = (ISocketMessageChannel) Program.client.GetChannel(scopeCM.ChannelID);
+		var message = await channel.GetMessageAsync(scopeCM.MessageID);
 
 		await channel.ModifyMessageAsync(message.Id, m => {
 			
@@ -186,7 +176,7 @@ static class DualChoiceFunctions {
 		await Program.discordServersCollection.UpdateOneAsync(filter, pullInstruction);
 	}
 
-	private static int voteValue(BsonDocument document, int index, VoteStyle voteType)
+	public static int voteValue(BsonDocument document, int index, VoteStyle voteType)
 	{
 		return document["current_polls_dualchoice"][index]["votes"][writeStrings[(int)voteType]].ToInt32();
 	}

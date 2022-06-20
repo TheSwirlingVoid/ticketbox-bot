@@ -38,26 +38,37 @@ static class ButtonHandlers {
 			return;
 		}
 		// Update the user's vote registered based on what they chose
-		var updateInstruction = Builders<BsonDocument>.Update.Set(
-								$"current_polls_dualchoice.{index}.votes.voters.{messageComponent.User.Id.ToString()}",
-								Convert.ToBoolean(voteType));
+		var update = Builders<BsonDocument>.Update.Set(
+			$"current_polls_dualchoice.{index}.votes.voters.{messageComponent.User.Id.ToString()}",
+			Convert.ToBoolean(voteType)
+		);
+
 		// get the value of upvotes/downvotes
-		int currentValue = DualChoiceFunctions.votedValue(document, index, voteType);
-		int currentOtherValue = DualChoiceFunctions.otherValue(document, index, voteType);
+		decimal upvotes;
+		decimal downvotes;
+		if (voteType == VoteStyle.UPVOTE) {
+			upvotes = DualChoiceFunctions.voteValue(document, index, voteType);
+			downvotes = DualChoiceFunctions.voteValue(document, index, 1-voteType);
 
-		var newValue = currentValue+1;
-		var newOtherValue = currentOtherValue-1;
+			upvotes++;
+			downvotes = userVoted ? downvotes-1 : downvotes;
+		}
+		else {
+			upvotes = DualChoiceFunctions.voteValue(document, index, 1-voteType);
+			downvotes = DualChoiceFunctions.voteValue(document, index, voteType);
 
-		decimal upvotes = voteType == VoteStyle.UPVOTE ? newValue : (userVoted ? newOtherValue : currentOtherValue);
-		decimal downvotes = voteType == VoteStyle.DOWNVOTE ? newValue : (userVoted ? newOtherValue : currentOtherValue);
+			downvotes++;
+			upvotes = userVoted ? upvotes-1 : upvotes;
+		}
+
 		// If the user already voted, take their vote out of the other option
-		if (userVoted)
-			await collection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, 1-voteType), newOtherValue));
+		// if (userVoted)
+		// 	await collection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, 1-voteType), newOtherValue));
+		
+		update = update.Set($"current_polls_dualchoice.{index}.votes.upvotes", upvotes);
+		update = update.Set($"current_polls_dualchoice.{index}.votes.downvotes", downvotes);
 
-
-		await collection.UpdateOneAsync(filter, Builders<BsonDocument>.Update.Set(DualChoiceFunctions.getUpdateString(index, voteType), newValue));
-		await collection.UpdateOneAsync(filter, updateInstruction);
-
+		await collection.UpdateOneAsync(filter, update);
 
 		/* ----------------------------- Message Editing ---------------------------- */
 		var pollText = document["current_polls_dualchoice"][index]["poll_text"].AsString;
@@ -96,6 +107,7 @@ static class ButtonHandlers {
 	{
 		await TerminateDCPoll(collection, scopeSCM, "Expired");
 	}
+	
 	private static async Task TerminateDCPoll(IMongoCollection<BsonDocument> collection, MessageScope scopeSCM, String expiryString)
 	{
 		var serverId = scopeSCM.ServerID;
