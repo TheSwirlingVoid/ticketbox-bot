@@ -61,7 +61,8 @@ namespace TicketBox
 			// var document = DocumentFunctions.getServerDocument(discordServersCollection, serverId);
 			var pollDocument = DocumentFunctions.getPollDocument(messageScope);
 
-			await DualChoice.removePollData(pollDocument);
+			if (pollDocument != new BsonDocument{})
+				await DualChoice.removePollData(pollDocument);
 		}
 
 		public static async Task expiredPollDeleter(TimeSpan timeSpan)
@@ -174,10 +175,16 @@ namespace TicketBox
 		{
 			while (true)
 			{
-				var numServers = client.Guilds.Count;
-				await client.SetGameAsync($"in {numServers} servers | /poll, /settings", null, ActivityType.Playing);
+				await numServersStatus();
 				await Task.Delay(repeatDelay);
 			}
+		}
+
+		public async Task numServersStatus()
+		{
+			await Task.Delay(TimeSpan.FromSeconds(1));
+			var numServers = client.Guilds.Count;
+			await client.SetGameAsync($"in {numServers} servers | /poll, /settings", null, ActivityType.Playing);
 		}
 
 		public int countFileLines(string filename)
@@ -236,14 +243,16 @@ namespace TicketBox
 			await JoinFunctions.createServerDocument(guild.Id);
 			/* ----------------------------- Welcome Message ---------------------------- */
 			var welcomeText = File.ReadAllText("src/welcome_message.txt");
+			await numServersStatus();
 			await guild.SystemChannel.SendMessageAsync(welcomeText);
 		}
 
 		private async Task LeftGuild(SocketGuild guild)
 		{
 			var filter = DocumentFunctions.serverIDFilter(guild.Id);
-			await discordServersCollection.DeleteManyAsync(filter);
+			await discordServersCollection.DeleteOneAsync(filter);
 			await pollCollection.DeleteManyAsync(filter);
+			await numServersStatus();
 		}
 
 		private async Task ButtonExecuted(SocketMessageComponent messageComponent)

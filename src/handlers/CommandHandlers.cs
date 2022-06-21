@@ -7,7 +7,6 @@ using TicketBox;
 static class CommandHandlers {
 	public static async Task PollDualChoiceCommand(SocketSlashCommand command, BotSettings settings, string pollText) 
 	{
-		//TODO: ADDDAYS settings.ExpiryDays
 		var expiryDate = DateTimeOffset.Now.AddDays(settings.ExpiryDays);
 		var stringExpiryDate = $"Expires {expiryDate.Date.ToString("MM/dd/yyyy")}";
 		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
