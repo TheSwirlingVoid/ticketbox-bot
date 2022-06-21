@@ -26,7 +26,7 @@ class CommandList {
 				.WithType(ApplicationCommandOptionType.SubCommand)
 				.AddOption(new SlashCommandOptionBuilder()
 					.WithName("options")
-					.WithDescription("Write the corresponding options in order! ex. \"Coffee, Champagne\"")
+					.WithDescription("Write the corresponding options in order! ex. \":coffee: Coffee, :champagne: Champagne\"")
 					.WithType(ApplicationCommandOptionType.String)
 					.WithRequired(true)
 				)

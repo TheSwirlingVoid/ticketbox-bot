@@ -5,9 +5,10 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class CommandHandlers {
-	public static async Task PollDualChoiceCommand(BsonDocument document, SocketSlashCommand command, BotSettings settings, string pollText) 
-	{	
-		var expiryDate = DateTimeOffset.Now.Date.AddDays(settings.ExpiryDays);
+	public static async Task PollDualChoiceCommand(SocketSlashCommand command, BotSettings settings, string pollText) 
+	{
+		//TODO: ADDDAYS settings.ExpiryDays
+		var expiryDate = DateTimeOffset.Now.AddDays(settings.ExpiryDays);
 		var stringExpiryDate = $"Expires {expiryDate.Date.ToString("MM/dd/yyyy")}";
 		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
 		/* ------------------------------ Embed Builder ----------------------------- */
@@ -22,8 +23,8 @@ static class CommandHandlers {
 
 
 		/* --------------------------- Bot Embed Response --------------------------- */
-		var pollEmbedBuilder = embedData.createInitialEmbed(pollText);
-		var message = await DualChoice.createBaseMessage(command, pollEmbedBuilder);
+		var pollEmbed = embedData.createInitialEmbed(pollText);
+		var message = await DualChoice.createMessage(command, pollEmbed);
 
 		var coreData = new DualChoiceCoreData(
 			pollText,
@@ -34,15 +35,13 @@ static class CommandHandlers {
 			0
 		);
 		var dualChoice = new DualChoice(coreData, settings);
+		dualChoice.ExpiryTime = unixExpiryTime;
 		dualChoice.EmbedData = embedData;
 
 		if (settings.CreateThreads)
 			await ((ITextChannel)command.Channel).CreateThreadAsync($"Poll Discussion—\"{pollText}\"", message: message);
 		/* ------------------------------- Data Saving ------------------------------ */
-		// Get the server's document
-		var baseData = new BaseDocumentData(new BaseMessageData(message.Id, pollText), new BaseTimeData(unixExpiryTime, stringExpiryDate));
-		dualChoice.saveInitialPoll(document, Program.discordServersCollection, command);
-
+		dualChoice.saveInitialPoll(command);
 	}
 
 	public static async Task SettingsCommand(DocumentWithCollection docCollection, SocketSlashCommand command, SocketSlashCommandDataOption[] options, GuildPermissions permissions)

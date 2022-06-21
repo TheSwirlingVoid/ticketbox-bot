@@ -5,18 +5,26 @@ using MongoDB.Driver;
 using TicketBox;
 
 class DualChoice {
+
+	//TODO: MOVE TO SUBCLASS
 	public DualChoiceCoreData CoreData { get; set; }
+
+	//TODO: MOVE TO SUBCLASS
 	public DualChoiceEmbedData EmbedData { get; set; }
 	public decimal TotalVoters { get; set; }
+
+	//TODO: MOVE TO SUBCLASS
 	public decimal PercentUpvoted { get; set; }
+
+	//TODO: MOVE TO SUBCLASS
 	public decimal PercentDownvoted { get; set; }
 	public long ExpiryTime {get; set;}
 	private bool DisabledButtons { get; set; }
-	public IMessage? Message { get; set; }
 	public MessageScope messageScope { get; set; }
 
 	private static readonly string[] writeStrings = {"downvotes", "upvotes"};
 
+	//TODO: MOVE TO SUBCLASS
 	public DualChoice(DualChoiceCoreData coreData, BotSettings settings)
 	{
 		CoreData = coreData;
@@ -32,12 +40,11 @@ class DualChoice {
 		messageScope = coreData.messageScope;
 	}
 
-	public static DualChoice getPollByMessage(BsonDocument document, MessageScope scope)
+	//TODO: MOVE TO SUBCLASS
+	public static DualChoice getPollByMessage(BsonDocument serverDoc, MessageScope scope)
 	{
-		var polls = document[$"{FieldNames.CURRENT_POLLS}"].AsBsonArray;
-		var index = indexOfPoll(polls, scope.MessageID);
+		var poll = DocumentFunctions.getPollDocument(scope);
 
-		var poll = polls[index];
 		var pollVotes = poll["votes"];
 
 		var coreData = new DualChoiceCoreData(
@@ -48,11 +55,12 @@ class DualChoice {
 
 		);
 
-		var settings = BotSettings.getServerSettings(document);
+		var settings = BotSettings.getServerSettings(serverDoc);
 		return new DualChoice(coreData, settings);
 	}
 
-	public EmbedBuilder createEmbed()
+	//TODO: MOVE TO SUBCLASS
+	public Embed createEmbed()
 	{
 		var upvotes = this.CoreData.Upvotes;
 		var downvotes = this.CoreData.Downvotes;
@@ -75,7 +83,8 @@ class DualChoice {
 		return buildEmbedWithData();
 	}
 
-	private EmbedBuilder buildEmbedWithData()
+	//TODO: MOVE TO SUBCLASS
+	private Embed buildEmbedWithData()
 	{
 
 		// Multipliers for emote percentage bars
@@ -104,16 +113,17 @@ class DualChoice {
 				$"{upvoteBar}\n**{this.PercentUpvoted}%** Upvoted"+ 
 				$"\n{downvoteBar}\n**{this.PercentDownvoted}%** Downvoted"
 			)
-			.AddField("Expiry Status", this.EmbedData.ExpiryString);
+			.AddField("Expiry Status", this.EmbedData.ExpiryString)
+			.Build();
 	}
 
-	public static async Task<Discord.Rest.RestFollowupMessage> createBaseMessage(SocketSlashCommand command, EmbedBuilder messageEmbedBuilder)
+	public static async Task<Discord.Rest.RestFollowupMessage> createMessage(SocketSlashCommand command, Embed messageEmbed)
 	{
 		// Defer the response, meaning the bot will recognize that the command was sent
 		// but won't finish its response.
 		await command.DeferAsync();
 		// Follow up the deferrance with a final message response
-		return await command.FollowupAsync(embed: messageEmbedBuilder.Build(), components: createButtons(false));
+		return await command.FollowupAsync(embed: messageEmbed, components: createButtons(false));
 	}
 
 	public long getUnixExpiryTimeFromNow(int expiryDays)
@@ -129,11 +139,13 @@ class DualChoice {
 		return stringExpiryDate;
 	}
 
-	public void saveInitialPoll(BsonDocument document, IMongoCollection<BsonDocument> collection, SocketSlashCommand command)
+	public void saveInitialPoll(SocketSlashCommand command)
 	{
+		
 		// Prepare the structured data for the document's poll list
 		BsonDocument pollDocument = new BsonDocument
 		{
+			{ "server_id", BsonValue.Create(command.GuildId.GetValueOrDefault()) },
 			{ "user_id", BsonValue.Create(command.User.Id) },
 			{ "poll_text", this.CoreData.PollText },
 			{ "votes", new BsonDocument {
@@ -143,12 +155,12 @@ class DualChoice {
 			} },
 			{ "message_id", BsonValue.Create(this.messageScope.MessageID) },
 			{ "channel_id", BsonValue.Create(command.Channel.Id) },
-			{"expiry_string", this.EmbedData.ExpiryString },
+			{ "expiry_string", this.EmbedData.ExpiryString },
 			{ "unix_expiry_time", this.ExpiryTime }
 		};
 
 		// Update the document with new data
-		Program.discordServersCollection.UpdateOne(document, Builders<BsonDocument>.Update.AddToSet($"{FieldNames.CURRENT_POLLS}", pollDocument));
+		Program.pollCollection.InsertOne(pollDocument);
 	}
 
 	public static int indexOfPoll(BsonArray currentPolls, ulong messageId)
@@ -173,9 +185,10 @@ class DualChoice {
 		return (previousValue == boolUserChoice);
 	}
 
-	public static bool? userPreviousValue(BsonDocument document, ulong userId, int index)
+	public static bool? userPreviousValue(BsonDocument pollDoc, ulong userId)
 	{
-		return (bool?)document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
+		//return (bool?)document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
+		return (bool?)pollDoc["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
 	}
 
 	public static bool userVoted(bool? previousValue)
@@ -190,17 +203,8 @@ class DualChoice {
 		}
 	}
 
-	public static string voteNumString(VoteStyle voteType)
-	{
-		return writeStrings[(short)voteType];
-	}
-
-	public static string getUpdateString(int index, VoteStyle voteType)
-	{
-		return $"{FieldNames.CURRENT_POLLS}.{index}.votes.{voteNumString(voteType)}";
-	}
-
-	public async Task updateEmbed(BsonDocument document, int index)
+	//TODO: MOVE TO SUBCLASS
+	public async Task updateEmbed(BsonDocument pollDoc)
 	{
 		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
 		var message = await channel.GetMessageAsync(messageScope.MessageID);
@@ -209,9 +213,7 @@ class DualChoice {
 		Action<MessageProperties> messageEdit = (m) => {
 			
 			/* --------------------------- Current Embed Data --------------------------- */
-			var poll = document[$"{FieldNames.CURRENT_POLLS}"][index];
-
-			var userId = Convert.ToUInt64(poll["user_id"]);
+			var userId = Convert.ToUInt64(pollDoc["user_id"]);
 			var embedAuthor = Program.client.GetUser(userId);
 			String username;
 			String userAvatar;
@@ -226,7 +228,7 @@ class DualChoice {
 				userAvatar = embedAuthor.GetAvatarUrl();
 			}
 
-			var expiryString = (string)poll["expiry_string"];
+			var expiryString = (string)pollDoc["expiry_string"];
 
 			if (this.DisabledButtons)
 			{
@@ -242,12 +244,13 @@ class DualChoice {
 			this.EmbedData.PollDate = message.CreatedAt;
 
 			/* ------------------------------ Create Embed ------------------------------ */
-			m.Embeds = new[] { createEmbed().Build() };
+			m.Embeds = new[] { createEmbed() };
 		};
 
 		await channel.ModifyMessageAsync(message.Id, m => messageEdit(m));
 	}
 
+	//TODO: MOVE TO SUBCLASS
 	private static MessageComponent createButtons(bool disabled)
 	{
 		return new ComponentBuilder()
@@ -262,74 +265,45 @@ class DualChoice {
 			).Build();
 	}
 
-	public static async Task removePollData(IMongoCollection<BsonDocument> collection, MessageScope scope)
+	public static async Task removePollData(BsonDocument pollDocument)
 	{
-		var serverId = scope.ServerID;
-		var messageId = scope.MessageID;
-
-		var filter = DocumentFunctions.serverIDFilter(serverId);
-		var document = Program.discordServersCollection.Find(filter).ToList()[0];
-
-		var dualChoicePolls = document[$"{FieldNames.CURRENT_POLLS}"];
-		int index = DualChoice.indexOfPoll(dualChoicePolls.AsBsonArray, messageId);
-		await DualChoice.removePollData(collection, filter, index);
-	}
-
-	private static async Task removePollData(IMongoCollection<BsonDocument> collection, FilterDefinition<BsonDocument> filter, int index)
-	{
-		// make everything that needs to be removed null for removal
-		var unsetInstruction = Builders<BsonDocument>.Update.Unset($"{FieldNames.CURRENT_POLLS}.{index}");
-		// remove all null
-		var pullInstruction = Builders<BsonDocument>.Update.PullAll($"{FieldNames.CURRENT_POLLS}", new string?[] { null });
-
-		await collection.UpdateOneAsync(filter, unsetInstruction);
-		await collection.UpdateOneAsync(filter, pullInstruction);
+		await Program.pollCollection.DeleteOneAsync(pollDocument);
 	}
 	
-	public async Task close(IMongoCollection<BsonDocument> collection, SocketMessageComponent messageComponent)
+	public async Task close(BsonDocument pollDocument, SocketMessageComponent messageComponent)
 	{
 		this.EmbedData.ExpiryString = $"Closed by {messageComponent.User}";
 
-		await terminate(collection);
+		await terminate(pollDocument);
 		await messageComponent.RespondAsync("Poll successfully closed!", ephemeral: true);
 	}
 
-	public async Task expire(IMongoCollection<BsonDocument> collection)
+	public async Task expire(BsonDocument pollDocument)
 	{
 		this.EmbedData.ExpiryString = "Expired";
-		await terminate(collection);
+		await terminate(pollDocument);
 	}
 
-	private async Task terminate(IMongoCollection<BsonDocument> collection)
+	private async Task terminate(BsonDocument pollDocument)
 	{
-		var serverId = this.messageScope.ServerID;//scopeSCM.ServerID;
-		var messageId = this.messageScope.MessageID;//scopeSCM.MessageID;
+		var serverId = this.messageScope.ServerID;
+		var messageId = this.messageScope.MessageID;
 		var channelId = this.messageScope.ChannelID;
 
 		var channel = (ISocketMessageChannel) Program.client.GetGuild(serverId).GetChannel(channelId);
 		var message = await channel.GetMessageAsync(messageId);
-
-		var document = DocumentFunctions.getServerDocument(collection, serverId);
-		var index = DualChoice.indexOfPoll(document[$"{FieldNames.CURRENT_POLLS}"].AsBsonArray, messageId);
 		//var poll = document[$"{FieldNames.CURRENT_POLLS}"][index];
 		//var pollVotes = poll["votes"];
-
-		var settings = BotSettings.getServerSettings(document);
-		// var coreData = new DualChoiceCoreData(
-		// 	poll["poll_text"].AsString,
-		// 	pollVotes["upvotes"].AsInt32,
-		// 	pollVotes["downvotes"].AsInt32
-
-		// );
-		//dualChoice = new DualChoice(coreData, settings, true);
+		
 		this.DisabledButtons = true;
-		await this.updateEmbed(document, index);
-		await DualChoice.removePollData(collection, messageScope);
+		await this.updateEmbed(pollDocument);
+		await DualChoice.removePollData(pollDocument);
 	}
 
-	public static int voteValue(BsonDocument document, int index, VoteStyle voteType)
+	public static int voteValue(BsonDocument document, VoteStyle voteType)
 	{
-		return document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"][writeStrings[(int)voteType]].ToInt32();
+		//return document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"][writeStrings[(int)voteType]].ToInt32();
+		return document["votes"][writeStrings[(int)voteType]].ToInt32();
 	}
 }
 

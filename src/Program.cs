@@ -19,6 +19,7 @@ namespace TicketBox
 		public static MongoClient mongoClient = new MongoClient(connectionString);
 		public static IMongoDatabase database = mongoClient.GetDatabase("ticketbox-bot");
 		public static IMongoCollection<BsonDocument> discordServersCollection = database.GetCollection<BsonDocument>("DiscordServers");
+		public static IMongoCollection<BsonDocument> pollCollection = database.GetCollection<BsonDocument>("Polls");
 
 		public async Task MainAsync()
 		{
@@ -49,66 +50,60 @@ namespace TicketBox
 		private async Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
 		{
 			var socketChannel = (SocketGuildChannel) channel.Value;
+			var serverId = socketChannel.Guild.Id;
 
 			var messageScope = new MessageScope(
-				socketChannel.Guild.Id,
+				serverId,
 				socketChannel.Id,
 				message.Id
 			);
 
-			await DualChoice.removePollData(discordServersCollection, messageScope);
+			// var document = DocumentFunctions.getServerDocument(discordServersCollection, serverId);
+			var pollDocument = DocumentFunctions.getPollDocument(messageScope);
+
+			await DualChoice.removePollData(pollDocument);
 		}
 
-		public static async Task expiredPollDeleter(IMongoCollection<BsonDocument> collection, TimeSpan timeSpan)
+		public static async Task expiredPollDeleter(TimeSpan timeSpan)
 		{
 			while (true)
 			{
 				long unixTimeNow = DateTimeOffset.Now.ToUnixTimeSeconds();
-				var timeFilter = Builders<BsonDocument>.Filter.Lte($"{FieldNames.CURRENT_POLLS}.unix_expiry_time", unixTimeNow);
-				var documents = collection.Find(timeFilter).ToList();
+				var timeFilter = Builders<BsonDocument>.Filter.Lte("unix_expiry_time", unixTimeNow);
+				var documents = await pollCollection.Find(timeFilter).ToListAsync();
 				// foreach DOCUMENT
 				foreach (var document in documents)
 				{
-					// foreach of its POLLS
-					var polls = document[$"{FieldNames.CURRENT_POLLS}"].AsBsonArray.ToList();
-					for (int index = 0; index < polls.Count; index++)
+					var expiryTime = document["unix_expiry_time"];
+					// if poll is expired
+					if (unixTimeNow >= expiryTime)
 					{
-						var poll = polls[index];
-						var expiryTime = poll["unix_expiry_time"];
-						// if poll is expired
-						if (unixTimeNow >= expiryTime)
-						{
-							/* ------------------------- Context for Poll Object ------------------------ */
-							ulong serverId = (ulong) document["server_id"].AsInt64;
-							var server = client.GetGuild(serverId);
-							
-							ulong channelId = (ulong) poll["channel_id"].AsInt64;
-							ulong messageId = (ulong) poll["message_id"].AsInt64;
-							var channel = server.GetTextChannel(channelId);
-							var message = await channel.GetMessageAsync(messageId);
-							// expire the poll
+						/* ------------------------- Context for Poll Object ------------------------ */
+						ulong serverId = (ulong) document["server_id"].AsInt64;
+						ulong channelId = (ulong) document["channel_id"].AsInt64;
+						ulong messageId = (ulong) document["message_id"].AsInt64;
+						// expire the poll
+						/* ----------------------------- Get Poll Object ---------------------------- */
+						var messageScope = new MessageScope(
+							serverId,
+							channelId,
+							messageId
+						);
 
-							/* ----------------------------- Get Poll Object ---------------------------- */
-							var messageScope = new MessageScope(
-								serverId,
-								channel.Id,
-								messageId
-							);
-
-							var coreData = new DualChoiceCoreData(
-								poll["poll_text"].AsString,
-								messageScope,
-								poll["votes"]["upvotes"].AsInt32,	
-								poll["votes"]["downvotes"].AsInt32
-							);
-							
-							var dualChoice = new DualChoice(
-								coreData,
-								BotSettings.getServerSettings(document)
-							);
-							/* ------------------------------- Expire Poll ------------------------------ */
-							await dualChoice.expire(discordServersCollection);
-						}
+						var coreData = new DualChoiceCoreData(
+							document["poll_text"].AsString,
+							messageScope,
+							document["votes"]["upvotes"].AsInt32,	
+							document["votes"]["downvotes"].AsInt32
+						);
+						var dualChoice = new DualChoice(
+							coreData,
+							BotSettings.getServerSettings(
+								DocumentFunctions.getServerDocument(serverId)
+							)
+						);
+						/* ------------------------------- Expire Poll ------------------------------ */
+						await dualChoice.expire(document);
 					}
 				}
 				// checks every hour
@@ -144,14 +139,14 @@ namespace TicketBox
 				Console.WriteLine(e.ToString());
 			}
 			/* -------------------------- Add Missing Documents ------------------------- */
-			await StartupFunctions.addMissingDocs(discordServersCollection);
+			await StartupFunctions.addMissingDocs();
 
 			// ignore these warnings–these functions need to run concurrently
 			//statusUpdater(60);
 			numServersStatus(TimeSpan.FromMinutes(30));
 			Console.WriteLine("started statusUpdater() or numServersStatus()");
 
-			expiredPollDeleter(discordServersCollection, TimeSpan.FromHours(1));
+			expiredPollDeleter(TimeSpan.FromHours(1));
 			Console.WriteLine("started expiredPollDeleter()");
 		}
 
@@ -201,7 +196,7 @@ namespace TicketBox
 		{
 
 			var options = command.Data.Options.ToArray();
-			var serverDoc = DocumentFunctions.getServerDocument(discordServersCollection, command.GuildId.GetValueOrDefault());
+			var serverDoc = DocumentFunctions.getServerDocument(command.GuildId.GetValueOrDefault());
 			var settings = BotSettings.getServerSettings(serverDoc);
 
 			// get the subCommand
@@ -218,7 +213,7 @@ namespace TicketBox
 					switch (subCommandName)
 					{
 						case "dualchoice":
-							await CommandHandlers.PollDualChoiceCommand(serverDoc, command, settings, (string)commandParameters[0].Value);
+							await CommandHandlers.PollDualChoiceCommand(command, settings, (string)commandParameters[0].Value);
 						break;
 					}
 				break;
@@ -238,10 +233,7 @@ namespace TicketBox
 		{
 			/* ----------------------------- Server Document ---------------------------- */
 			// Create the server's document
-			await JoinFunctions.createServerDocument(
-				discordServersCollection, 
-				guild.Id
-			);
+			await JoinFunctions.createServerDocument(guild.Id);
 			/* ----------------------------- Welcome Message ---------------------------- */
 			var welcomeText = File.ReadAllText("src/welcome_message.txt");
 			await guild.SystemChannel.SendMessageAsync(welcomeText);
@@ -251,16 +243,29 @@ namespace TicketBox
 		{
 			var filter = DocumentFunctions.serverIDFilter(guild.Id);
 			await discordServersCollection.DeleteManyAsync(filter);
+			await pollCollection.DeleteManyAsync(filter);
 		}
 
 		private async Task ButtonExecuted(SocketMessageComponent messageComponent)
 		{
+			var serverDoc = DocumentFunctions.getServerDocument(
+								messageComponent.GuildId.GetValueOrDefault()
+							);
+			var messageScope = new MessageScope(
+								messageComponent.GuildId.GetValueOrDefault(),
+								messageComponent.ChannelId.GetValueOrDefault(),
+								messageComponent.Message.Id
+							);
 			switch (messageComponent.Data.CustomId)
 			{
 				case "upvote-poll-dc":
 					try
 					{
-						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.UPVOTE);
+						await ButtonHandlers.VoteButton(
+							BotSettings.getServerSettings(serverDoc),
+							messageComponent,
+							VoteStyle.UPVOTE
+						);
 					}
 					catch(Discord.Net.HttpException) { }
 				break;
@@ -268,7 +273,11 @@ namespace TicketBox
 				case "downvote-poll-dc":
 					try
 					{
-						await ButtonHandlers.VoteButton(discordServersCollection, messageComponent, VoteStyle.DOWNVOTE);
+						await ButtonHandlers.VoteButton(
+							BotSettings.getServerSettings(serverDoc),
+							messageComponent,
+							VoteStyle.DOWNVOTE
+						);
 					}
 					catch(Discord.Net.HttpException) { }
 				break;
@@ -277,17 +286,11 @@ namespace TicketBox
 					var permissions = ((SocketGuildUser) messageComponent.User).GuildPermissions;
 					if (permissions.ManageMessages || permissions.Administrator)
 						/* --------------------------- Get and Close Poll --------------------------- */
-						await DualChoice.getPollByMessage(
-							DocumentFunctions.getServerDocument(
-								discordServersCollection,
-								messageComponent.GuildId.GetValueOrDefault()
-							),
-							new MessageScope(
-								messageComponent.GuildId.GetValueOrDefault(),
-								messageComponent.ChannelId.GetValueOrDefault(),
-								messageComponent.Message.Id
-							)
-						).close(discordServersCollection, messageComponent);
+						await DualChoice.getPollByMessage(serverDoc,messageScope)
+							.close(
+								DocumentFunctions.getPollDocument(messageScope),
+								messageComponent
+							);
 						/* -------------------------------------------------------------------------- */
 					else {
 						await messageComponent.RespondAsync("You need the **Manage Messages** permission or need to be an **Administrator** to close polls!", ephemeral: true);

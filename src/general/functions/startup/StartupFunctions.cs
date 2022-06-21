@@ -3,15 +3,15 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class StartupFunctions {
-	public static async Task addMissingDocs(IMongoCollection<BsonDocument> collection)
+	public static async Task addMissingDocs()
 	{
 		foreach (var guild in Program.client.Guilds)
 		{
 			// if the server doc doesn't exist
-			if (!DocumentFunctions.serverDocExists(collection, guild.Id))
+			if (!DocumentFunctions.serverDocExists(Program.discordServersCollection, guild.Id))
 			{
-				await JoinFunctions.createServerDocument(collection, guild.Id);
-				Console.WriteLine($"Joined {guild.Name}");
+				await JoinFunctions.createServerDocument(guild.Id);
+				Console.WriteLine($"Joined (Delayed) {guild.Name}");
 			}
 		}
 	}

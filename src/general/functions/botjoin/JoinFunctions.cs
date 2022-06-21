@@ -3,11 +3,11 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class JoinFunctions {
-	public static async Task createServerDocument(IMongoCollection<BsonDocument> collection, ulong guildId)
+	public static async Task createServerDocument(ulong guildId)
 	{
 		// If this server does not have its own document already
 		var guildName = Program.client.GetGuild(guildId).Name;
-		if (collection.Find(DocumentFunctions.serverIDFilter(guildId)).CountDocuments() == 0)
+		if (Program.discordServersCollection.Find(DocumentFunctions.serverIDFilter(guildId)).CountDocuments() == 0)
 		{
 			// Create the base BSON Document
 			BsonDocument newServerDocument = new BsonDocument
@@ -20,10 +20,9 @@ static class JoinFunctions {
 						{"expiry_days", 7},
 						{"create_threads", true}
 					}
-				},
-				{ $"{FieldNames.CURRENT_POLLS}", new BsonArray {} }
+				}
 			};
-			await collection.InsertOneAsync(newServerDocument);
+			await Program.discordServersCollection.InsertOneAsync(newServerDocument);
 		}
 	}
 }

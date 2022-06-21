@@ -13,52 +13,31 @@ class DualChoiceEmbedData {
 		PollDate = pollDate;
 		ExpiryString = expiryString;
 	}
-	public EmbedBuilder createInitialEmbed(String pollText)
-	{
-		var upvotes = 0;
-		var downvotes = 0;
-		var pollDate = DateTimeOffset.Now;
-
-		/* --------------------- Vote Percentages & Multipliers --------------------- */
-		// So that you can't divide by 0
-		decimal totalVoters = (upvotes + downvotes);
-		decimal votesNonZero = Math.Max(totalVoters, 1);
-		decimal percentUpvoted = Math.Round(Convert.ToDecimal((upvotes/votesNonZero)*1000))/10;
-		decimal percentDownvoted = Math.Round(Convert.ToDecimal((downvotes/votesNonZero)*1000))/10;
-
-		// Return the embed build with the data above
-		return buildInitialEmbedWithData(pollText, totalVoters, percentUpvoted, percentDownvoted);
-	}
-	private EmbedBuilder buildInitialEmbedWithData(String pollText, decimal totalVoters, decimal percentUpvoted, decimal percentDownvoted)
+	
+	public Embed createInitialEmbed(String pollText)
 	{
 
-		// Multipliers for emote percentage bars
-		int upvotedMultiplier = Convert.ToInt32(percentUpvoted/10);
-		int downvotedMultiplier = Convert.ToInt32(percentDownvoted/10);
-
-		var upvoteBar = getBarString(upvotedMultiplier, VoteStyle.UPVOTE);
-		var downvoteBar = getBarString(downvotedMultiplier, VoteStyle.DOWNVOTE);
+		var upvoteBar = getBarString(0, VoteStyle.UPVOTE);
+		var downvoteBar = getBarString(0, VoteStyle.DOWNVOTE);
 
 		// footer string (ex. "1 user has voted" vs "2 users have voted")
 		var footerString = " users have voted. ";
-		if (totalVoters == 1)
-			footerString = " user has voted. ";
-
 		// Build final embed
 		return new EmbedBuilder()
 			.WithDescription("**———————————————**")
-			.WithFooter("\n\n"+totalVoters+footerString)
-			.WithTimestamp(PollDate)
+			.WithFooter("\n\n"+0+footerString)
+			.WithTimestamp(DateTimeOffset.Now)
 			.AddField("Poll", $"{pollText}")
 				.WithAuthor(new EmbedAuthorBuilder()
 					.WithIconUrl(UserAvatar)
 					.WithName(UserName)
 				)
 			.AddField("Stats", 
-				$"{upvoteBar}\n**{percentUpvoted}%** Upvoted"+ 
-				$"\n{downvoteBar}\n**{percentDownvoted}%** Downvoted"
+				$"{upvoteBar}\n**{0}%** Upvoted"+ 
+				$"\n{downvoteBar}\n**{0}%** Downvoted"
 			)
-			.AddField("Expiry Status", ExpiryString);
+			.AddField("Expiry Status", ExpiryString)
+			.Build();
 	}
 
 	public static String getBarString(int multiplier, VoteStyle style)
