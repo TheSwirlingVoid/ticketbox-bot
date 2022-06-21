@@ -7,27 +7,41 @@ using TicketBox;
 static class CommandHandlers {
 	public static async Task PollDualChoiceCommand(BsonDocument document, SocketSlashCommand command, BotSettings settings, string pollText) 
 	{	
-
 		var expiryDate = DateTimeOffset.Now.Date.AddDays(settings.ExpiryDays);
 		var stringExpiryDate = $"Expires {expiryDate.Date.ToString("MM/dd/yyyy")}";
 		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
 		/* ------------------------------ Embed Builder ----------------------------- */
 		var commandOptions = command.Data.Options.ToArray();
-		var embedData = new DualChoiceData(0, 0, pollText, false)
-			.userAvatar(command.User.GetAvatarUrl())
-			.userName(command.User.ToString())
-			.pollDate(DateTimeOffset.Now)
-			.expiryString(stringExpiryDate);
-		var pollEmbedBuilder = DualChoiceFunctions.createEmbed(null, embedData);
+
+		var embedData = new DualChoiceEmbedData(
+			command.User.GetAvatarUrl(),
+			command.User.ToString(),
+			DateTimeOffset.Now,
+			stringExpiryDate
+		);
+
 
 		/* --------------------------- Bot Embed Response --------------------------- */
-		var message = await DualChoiceFunctions.createMessage(command, pollEmbedBuilder);
+		var pollEmbedBuilder = embedData.createInitialEmbed(pollText);
+		var message = await DualChoice.createBaseMessage(command, pollEmbedBuilder);
+
+		var coreData = new DualChoiceCoreData(
+			pollText,
+			new MessageScope(command.GuildId.GetValueOrDefault(),
+			command.ChannelId.GetValueOrDefault(),
+			message.Id),
+			0,
+			0
+		);
+		var dualChoice = new DualChoice(coreData, settings);
+		dualChoice.EmbedData = embedData;
+
 		if (settings.CreateThreads)
 			await ((ITextChannel)command.Channel).CreateThreadAsync($"Poll Discussion—\"{pollText}\"", message: message);
 		/* ------------------------------- Data Saving ------------------------------ */
 		// Get the server's document
-		var baseData = new BaseDocumentData(new BaseMessageData(message.Id, pollText), new BaseTimeData(unixExpiryTime));
-		DualChoiceFunctions.saveInitialPoll(document, Program.discordServersCollection, command, baseData);
+		var baseData = new BaseDocumentData(new BaseMessageData(message.Id, pollText), new BaseTimeData(unixExpiryTime, stringExpiryDate));
+		dualChoice.saveInitialPoll(document, Program.discordServersCollection, command);
 
 	}
 

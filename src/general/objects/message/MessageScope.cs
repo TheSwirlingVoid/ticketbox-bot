@@ -3,6 +3,13 @@ class MessageScope {
 	public ulong ChannelID {get; private set;}
 	public ulong MessageID {get; private set;}
 
+	public MessageScope(ulong serverId, ulong channelId, ulong messageId)
+	{
+		ServerID = serverId;
+		ChannelID = channelId;
+		MessageID = messageId;
+	}
+
 	public MessageScope serverId(ulong serverId)
 	{
 		ServerID = serverId;

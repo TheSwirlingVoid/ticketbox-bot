@@ -6,7 +6,7 @@ class CommandList {
 	public CommandList()
 	{
 		// POLL COMMAND
-		var pollDC_command = new SlashCommandBuilder()
+		var poll_command = new SlashCommandBuilder()
 			.WithName(BotCommands.POLL)
 			.WithDescription("Create a poll!")
 			.AddOption(new SlashCommandOptionBuilder()
@@ -19,8 +19,20 @@ class CommandList {
 					.WithType(ApplicationCommandOptionType.String)
 					.WithRequired(true)
 				)
+			)
+			.AddOption(new SlashCommandOptionBuilder()
+				.WithName("dropdown")
+				.WithDescription("Create a dropdown poll with custom vote choices!")
+				.WithType(ApplicationCommandOptionType.SubCommand)
+				.AddOption(new SlashCommandOptionBuilder()
+					.WithName("options")
+					.WithDescription("Write the corresponding options in order! ex. \"Coffee, Champagne\"")
+					.WithType(ApplicationCommandOptionType.String)
+					.WithRequired(true)
+				)
 			).Build();
-		commands.Add(pollDC_command);
+
+		commands.Add(poll_command);
 
 		var settings_command = new SlashCommandBuilder()
 			.WithName(BotCommands.SETTINGS)

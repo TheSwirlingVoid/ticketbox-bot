@@ -10,9 +10,7 @@ static class StartupFunctions {
 			// if the server doc doesn't exist
 			if (!DocumentFunctions.serverDocExists(collection, guild.Id))
 			{
-				var scopeS = new MessageScope()
-					.serverId(guild.Id);
-				await JoinFunctions.createServerDocument(collection, scopeS);
+				await JoinFunctions.createServerDocument(collection, guild.Id);
 				Console.WriteLine($"Joined {guild.Name}");
 			}
 		}

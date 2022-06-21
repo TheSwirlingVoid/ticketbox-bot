@@ -2,12 +2,14 @@ class BaseDocumentData {
 	public ulong MessageID {get; private set;}
 	public String PollText {get; private set;}
 	public long ExpiryTime {get; private set;}
+	public String ExpiryString {get; private set;}
 
 	public BaseDocumentData(BaseMessageData msgData, BaseTimeData timeData)
 	{
 		PollText = msgData.pollText;
 		MessageID = msgData.messageId;
 		ExpiryTime = timeData.expiryTime;
+		ExpiryString = timeData.expiryString;
 	}
 }
 
@@ -26,9 +28,11 @@ class BaseMessageData {
 class BaseTimeData {
 
 	public long expiryTime;
+	public String expiryString;
 
-	public BaseTimeData(long expiryTime)
+	public BaseTimeData(long expiryTime, String expiryString)
 	{
 		this.expiryTime = expiryTime;
+		this.expiryString = expiryString;
 	}
 }

@@ -3,17 +3,16 @@ using MongoDB.Driver;
 using TicketBox;
 
 static class JoinFunctions {
-	public static async Task createServerDocument(IMongoCollection<BsonDocument> collection, MessageScope scopeS)
+	public static async Task createServerDocument(IMongoCollection<BsonDocument> collection, ulong guildId)
 	{
 		// If this server does not have its own document already
-		var guildID = scopeS.ServerID;
-		var guildName = Program.client.GetGuild(guildID).Name;
-		if (collection.Find(DocumentFunctions.serverIDFilter(guildID)).CountDocuments() == 0)
+		var guildName = Program.client.GetGuild(guildId).Name;
+		if (collection.Find(DocumentFunctions.serverIDFilter(guildId)).CountDocuments() == 0)
 		{
 			// Create the base BSON Document
 			BsonDocument newServerDocument = new BsonDocument
 			{
-				{ "server_id", BsonValue.Create(guildID) },
+				{ "server_id", BsonValue.Create(guildId) },
 				{ "server_name", guildName },
 				{ "bot_options", 
 					new BsonDocument {
@@ -22,7 +21,7 @@ static class JoinFunctions {
 						{"create_threads", true}
 					}
 				},
-				{ "current_polls_dualchoice", new BsonArray {} }
+				{ $"{FieldNames.CURRENT_POLLS}", new BsonArray {} }
 			};
 			await collection.InsertOneAsync(newServerDocument);
 		}

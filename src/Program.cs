@@ -48,11 +48,15 @@ namespace TicketBox
 
 		private async Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
 		{
-			var messageScope = new MessageScope()
-				.serverId(((SocketGuildChannel) channel.Value).Guild.Id)
-				.messageId(message.Id);
+			var socketChannel = (SocketGuildChannel) channel.Value;
 
-			await DualChoiceFunctions.removePollData(discordServersCollection, messageScope);
+			var messageScope = new MessageScope(
+				socketChannel.Guild.Id,
+				socketChannel.Id,
+				message.Id
+			);
+
+			await DualChoice.removePollData(discordServersCollection, messageScope);
 		}
 
 		public static async Task expiredPollDeleter(IMongoCollection<BsonDocument> collection, TimeSpan timeSpan)
@@ -60,35 +64,50 @@ namespace TicketBox
 			while (true)
 			{
 				long unixTimeNow = DateTimeOffset.Now.ToUnixTimeSeconds();
-				var timeFilter = Builders<BsonDocument>.Filter.Lte("current_polls_dualchoice.unix_expiry_time", unixTimeNow);
+				var timeFilter = Builders<BsonDocument>.Filter.Lte($"{FieldNames.CURRENT_POLLS}.unix_expiry_time", unixTimeNow);
 				var documents = collection.Find(timeFilter).ToList();
 				// foreach DOCUMENT
 				foreach (var document in documents)
 				{
 					// foreach of its POLLS
-					var polls_DC = document["current_polls_dualchoice"].AsBsonArray.ToList();
-					for (int index = 0; index < polls_DC.Count; index++)
+					var polls = document[$"{FieldNames.CURRENT_POLLS}"].AsBsonArray.ToList();
+					for (int index = 0; index < polls.Count; index++)
 					{
-						var poll = polls_DC[index];
+						var poll = polls[index];
 						var expiryTime = poll["unix_expiry_time"];
+						// if poll is expired
 						if (unixTimeNow >= expiryTime)
 						{
+							/* ------------------------- Context for Poll Object ------------------------ */
 							ulong serverId = (ulong) document["server_id"].AsInt64;
 							var server = client.GetGuild(serverId);
-							if (client.Guilds.Contains(server))
-							{
-								ulong channelId = (ulong) poll["channel_id"].AsInt64;
-								ulong messageId = (ulong) poll["message_id"].AsInt64;
-								var channel = server.GetTextChannel(channelId);
-								var message = await channel.GetMessageAsync(messageId);
-								// expire the poll
-								var scopeSCM = new MessageScope()
-									.serverId(serverId)
-									.channelId(channel.Id)
-									.messageId(messageId);
-								
-								await ButtonHandlers.ExpireDCPoll(discordServersCollection, scopeSCM);
-							}
+							
+							ulong channelId = (ulong) poll["channel_id"].AsInt64;
+							ulong messageId = (ulong) poll["message_id"].AsInt64;
+							var channel = server.GetTextChannel(channelId);
+							var message = await channel.GetMessageAsync(messageId);
+							// expire the poll
+
+							/* ----------------------------- Get Poll Object ---------------------------- */
+							var messageScope = new MessageScope(
+								serverId,
+								channel.Id,
+								messageId
+							);
+
+							var coreData = new DualChoiceCoreData(
+								poll["poll_text"].AsString,
+								messageScope,
+								poll["votes"]["upvotes"].AsInt32,	
+								poll["votes"]["downvotes"].AsInt32
+							);
+							
+							var dualChoice = new DualChoice(
+								coreData,
+								BotSettings.getServerSettings(document)
+							);
+							/* ------------------------------- Expire Poll ------------------------------ */
+							await dualChoice.expire(discordServersCollection);
 						}
 					}
 				}
@@ -161,7 +180,7 @@ namespace TicketBox
 			while (true)
 			{
 				var numServers = client.Guilds.Count;
-				await client.SetGameAsync($"in {numServers} servers | /poll, settings", null, ActivityType.Playing);
+				await client.SetGameAsync($"in {numServers} servers | /poll, /settings", null, ActivityType.Playing);
 				await Task.Delay(repeatDelay);
 			}
 		}
@@ -219,9 +238,9 @@ namespace TicketBox
 		{
 			/* ----------------------------- Server Document ---------------------------- */
 			// Create the server's document
-			await JoinFunctions.createServerDocument(discordServersCollection, 
-				new MessageScope()
-					.serverId(guild.Id)
+			await JoinFunctions.createServerDocument(
+				discordServersCollection, 
+				guild.Id
 			);
 			/* ----------------------------- Welcome Message ---------------------------- */
 			var welcomeText = File.ReadAllText("src/welcome_message.txt");
@@ -257,7 +276,19 @@ namespace TicketBox
 				case "close-poll-dc":
 					var permissions = ((SocketGuildUser) messageComponent.User).GuildPermissions;
 					if (permissions.ManageMessages || permissions.Administrator)
-						await ButtonHandlers.CloseDCPoll(discordServersCollection, messageComponent);
+						/* --------------------------- Get and Close Poll --------------------------- */
+						await DualChoice.getPollByMessage(
+							DocumentFunctions.getServerDocument(
+								discordServersCollection,
+								messageComponent.GuildId.GetValueOrDefault()
+							),
+							new MessageScope(
+								messageComponent.GuildId.GetValueOrDefault(),
+								messageComponent.ChannelId.GetValueOrDefault(),
+								messageComponent.Message.Id
+							)
+						).close(discordServersCollection, messageComponent);
+						/* -------------------------------------------------------------------------- */
 					else {
 						await messageComponent.RespondAsync("You need the **Manage Messages** permission or need to be an **Administrator** to close polls!", ephemeral: true);
 					}
