@@ -1,3 +1,7 @@
 src/statuses.txt
 src/welcome_message.txt
 src/token.txt
+bin/*
+obj/*
+TicketBox.csproj
+.gitignore
