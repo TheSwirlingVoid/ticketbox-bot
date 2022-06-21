@@ -79,6 +79,7 @@ class ButtonHandlers {
 		var coreData = new DualChoiceCoreData(
 			pollText,
 			new MessageScope(serverId, channel.Id, message.Id),
+			Convert.ToUInt64(pollDoc["user_id"]),
 			upvotes,
 			downvotes
 
@@ -93,6 +94,44 @@ class ButtonHandlers {
 			await messageComponent.RespondAsync("Vote successfully switched!", ephemeral: true);
 		else {
 			await messageComponent.RespondAsync("Vote successful!", ephemeral: true);
+		}
+	}
+	public static async Task RetractVote(BotSettings settings, SocketMessageComponent messageComponent)
+	{
+		var messageScope = new MessageScope(
+			messageComponent.GuildId.GetValueOrDefault(),
+			messageComponent.ChannelId.GetValueOrDefault(),
+			messageComponent.Message.Id
+		);
+		var pollDoc = DocumentFunctions.getPollDocument(messageScope);
+		var userId = messageComponent.User.Id;
+
+		var previousValue = DualChoice.userPreviousValue(pollDoc, userId);
+
+		int upvotes = DualChoice.voteValue(pollDoc, VoteStyle.UPVOTE);
+		int downvotes = DualChoice.voteValue(pollDoc, VoteStyle.DOWNVOTE);
+		// check for vote
+		if (previousValue != null)
+		{
+			
+			var coreData = new DualChoiceCoreData(
+				pollDoc["poll_text"].AsString,
+				messageScope,
+				Convert.ToUInt64(pollDoc["user_id"]),
+				upvotes,
+				downvotes
+			);
+
+			var dualChoice = new DualChoice(coreData, settings);
+
+			var update = dualChoice.getRetractUpdate(previousValue.Value, messageComponent);
+
+			await dualChoice.updateEmbed(pollDoc);
+			await Program.pollCollection.UpdateOneAsync(pollDoc, update);
+			await messageComponent.RespondAsync("Vote successfully removed!", ephemeral: true);
+		}
+		else {
+			await messageComponent.RespondAsync("You haven't voted yet!", ephemeral: true);
 		}
 	}
 }

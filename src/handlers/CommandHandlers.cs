@@ -30,6 +30,7 @@ static class CommandHandlers {
 			new MessageScope(command.GuildId.GetValueOrDefault(),
 			command.ChannelId.GetValueOrDefault(),
 			message.Id),
+			Convert.ToUInt64(command.User.Id),
 			0,
 			0
 		);
@@ -82,11 +83,11 @@ static class CommandHandlers {
 
 	public static async Task changeOption(DocumentWithCollection docCollection, String option, BsonValue value)
 	{
-		var document = docCollection.document;
+		var serverDoc = docCollection.document;
 		var collection = docCollection.collection;
 
 		var updateInstruction = Builders<BsonDocument>.Update.Set($"bot_options.{option}", value);
-		await collection.UpdateOneAsync(document, updateInstruction);
+		await collection.UpdateOneAsync(serverDoc, updateInstruction);
 
 	}
 }

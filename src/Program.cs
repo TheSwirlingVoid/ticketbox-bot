@@ -57,12 +57,11 @@ namespace TicketBox
 				socketChannel.Id,
 				message.Id
 			);
+			
+			var pollDoc = DocumentFunctions.getPollDocument(messageScope);
 
-			// var document = DocumentFunctions.getServerDocument(discordServersCollection, serverId);
-			var pollDocument = DocumentFunctions.getPollDocument(messageScope);
-
-			if (pollDocument != new BsonDocument{})
-				await DualChoice.removePollData(pollDocument);
+			if (pollDoc != new BsonDocument{})
+				await DualChoice.removePollData(pollDoc);
 		}
 
 		public static async Task expiredPollDeleter(TimeSpan timeSpan)
@@ -73,16 +72,16 @@ namespace TicketBox
 				var timeFilter = Builders<BsonDocument>.Filter.Lte("unix_expiry_time", unixTimeNow);
 				var documents = await pollCollection.Find(timeFilter).ToListAsync();
 				// foreach DOCUMENT
-				foreach (var document in documents)
+				foreach (var pollDoc in documents)
 				{
-					var expiryTime = document["unix_expiry_time"];
+					var expiryTime = pollDoc["unix_expiry_time"];
 					// if poll is expired
 					if (unixTimeNow >= expiryTime)
 					{
 						/* ------------------------- Context for Poll Object ------------------------ */
-						ulong serverId = (ulong) document["server_id"].AsInt64;
-						ulong channelId = (ulong) document["channel_id"].AsInt64;
-						ulong messageId = (ulong) document["message_id"].AsInt64;
+						ulong serverId = (ulong) pollDoc["server_id"].AsInt64;
+						ulong channelId = (ulong) pollDoc["channel_id"].AsInt64;
+						ulong messageId = (ulong) pollDoc["message_id"].AsInt64;
 						// expire the poll
 						/* ----------------------------- Get Poll Object ---------------------------- */
 						var messageScope = new MessageScope(
@@ -92,10 +91,11 @@ namespace TicketBox
 						);
 
 						var coreData = new DualChoiceCoreData(
-							document["poll_text"].AsString,
+							pollDoc["poll_text"].AsString,
 							messageScope,
-							document["votes"]["upvotes"].AsInt32,	
-							document["votes"]["downvotes"].AsInt32
+							Convert.ToUInt64(pollDoc["user_id"]),
+							pollDoc["votes"]["upvotes"].AsInt32,	
+							pollDoc["votes"]["downvotes"].AsInt32
 						);
 						var dualChoice = new DualChoice(
 							coreData,
@@ -104,7 +104,7 @@ namespace TicketBox
 							)
 						);
 						/* ------------------------------- Expire Poll ------------------------------ */
-						await dualChoice.expire(document);
+						await dualChoice.expire(pollDoc);
 					}
 				}
 				// checks every hour
@@ -266,13 +266,15 @@ namespace TicketBox
 								messageComponent.ChannelId.GetValueOrDefault(),
 								messageComponent.Message.Id
 							);
+			var serverSettings = BotSettings.getServerSettings(serverDoc);
+
 			switch (messageComponent.Data.CustomId)
 			{
 				case "upvote-poll-dc":
 					try
 					{
 						await ButtonHandlers.VoteButton(
-							BotSettings.getServerSettings(serverDoc),
+							serverSettings,
 							messageComponent,
 							VoteStyle.UPVOTE
 						);
@@ -284,12 +286,19 @@ namespace TicketBox
 					try
 					{
 						await ButtonHandlers.VoteButton(
-							BotSettings.getServerSettings(serverDoc),
+							serverSettings,
 							messageComponent,
 							VoteStyle.DOWNVOTE
 						);
 					}
 					catch(Discord.Net.HttpException) { }
+				break;
+
+				case "retractvote-poll-dc":
+					await ButtonHandlers.RetractVote(
+						serverSettings, 
+						messageComponent
+					);
 				break;
 
 				case "close-poll-dc":

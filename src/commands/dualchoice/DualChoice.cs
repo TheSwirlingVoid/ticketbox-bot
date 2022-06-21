@@ -50,6 +50,7 @@ class DualChoice {
 		var coreData = new DualChoiceCoreData(
 			poll["poll_text"].AsString,
 			scope,
+			Convert.ToUInt64(poll["user_id"]),
 			pollVotes["upvotes"].AsInt32,
 			pollVotes["downvotes"].AsInt32
 
@@ -187,7 +188,6 @@ class DualChoice {
 
 	public static bool? userPreviousValue(BsonDocument pollDoc, ulong userId)
 	{
-		//return (bool?)document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
 		return (bool?)pollDoc["votes"]["voters"].ToBsonDocument().GetValue(userId.ToString(), null);
 	}
 
@@ -256,13 +256,33 @@ class DualChoice {
 		return new ComponentBuilder()
 			.AddRow(
 				new ActionRowBuilder()
-					.WithButton("Upvote", "upvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsup:"), disabled: disabled)
-					.WithButton("Downvote", "downvote-poll-dc", ButtonStyle.Primary, Emoji.Parse(":thumbsdown:"), disabled: disabled)
+					.WithButton(label: "Upvote", customId: "upvote-poll-dc", emote: Emote.Parse("<:upvote:988923628571738164>"), style: ButtonStyle.Primary, disabled: disabled)
+					.WithButton(label: "Downvote", customId: "downvote-poll-dc", emote: Emote.Parse("<:downvote:988923662293934141>"), style: ButtonStyle.Primary, disabled: disabled)
 			)
 			.AddRow(
 				new ActionRowBuilder()
-					.WithButton("Close Voting", "close-poll-dc", ButtonStyle.Danger, Emoji.Parse(":checkered_flag:"), disabled: disabled)
+					.WithButton(label: "Retract Vote", customId: "retractvote-poll-dc", emote: Emote.Parse("<:retract_vote:988938631643267083>"), style: ButtonStyle.Secondary, disabled: disabled)
+					.WithButton(label: "Close Voting", customId: "close-poll-dc", emote: Emote.Parse("<:close_poll:988923692442615889>"), style: ButtonStyle.Danger, disabled: disabled)
 			).Build();
+	}
+
+	public UpdateDefinition<BsonDocument> getRetractUpdate(bool previousValue, SocketMessageComponent messageComponent)
+	{
+		var update = Builders<BsonDocument>.Update.Unset(
+			$"votes.voters.{messageComponent.User.Id.ToString()}"
+		);
+
+		if (previousValue == true)
+		{
+			this.CoreData.Upvotes--;
+			update = update.Set($"votes.upvotes", this.CoreData.Upvotes);
+		}
+		else
+		{
+			this.CoreData.Downvotes--;
+			update = update.Set($"votes.downvotes", this.CoreData.Downvotes);
+		}
+		return update;
 	}
 
 	public static async Task removePollData(BsonDocument pollDocument)
@@ -292,9 +312,7 @@ class DualChoice {
 
 		var channel = (ISocketMessageChannel) Program.client.GetGuild(serverId).GetChannel(channelId);
 		var message = await channel.GetMessageAsync(messageId);
-		//var poll = document[$"{FieldNames.CURRENT_POLLS}"][index];
-		//var pollVotes = poll["votes"];
-		
+
 		this.DisabledButtons = true;
 		await this.updateEmbed(pollDocument);
 		await DualChoice.removePollData(pollDocument);
@@ -302,7 +320,6 @@ class DualChoice {
 
 	public static int voteValue(BsonDocument document, VoteStyle voteType)
 	{
-		//return document[$"{FieldNames.CURRENT_POLLS}"][index]["votes"][writeStrings[(int)voteType]].ToInt32();
 		return document["votes"][writeStrings[(int)voteType]].ToInt32();
 	}
 }
