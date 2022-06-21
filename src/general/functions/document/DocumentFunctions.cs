@@ -13,10 +13,10 @@ static class DocumentFunctions {
 		return Program.discordServersCollection.Find(DocumentFunctions.serverIDFilter(serverId)).ToList()[0];
 	}
 
-	public static bool serverDocExists(IMongoCollection<BsonDocument> collection, ulong guildId)
+	public static bool serverDocExists(ulong guildId)
 	{
 		// if the server document isn't there
-		if (collection.Find(serverIDFilter(guildId)).CountDocuments() == 0)
+		if (Program.discordServersCollection.Find(serverIDFilter(guildId)).CountDocuments() == 0)
 		{
 			return false;
 		}

@@ -43,7 +43,7 @@ static class CommandHandlers {
 		dualChoice.saveInitialPoll(command);
 	}
 
-	public static async Task SettingsCommand(DocumentWithCollection docCollection, SocketSlashCommand command, SocketSlashCommandDataOption[] options, GuildPermissions permissions)
+	public static async Task SettingsCommand(DocumentWithCollection docCollection, SocketSlashCommand command, SocketSlashCommandDataOption[] options)
 	{
 		var subCommand = options.First();
 		var subCommandName = subCommand.Name;
@@ -61,7 +61,8 @@ static class CommandHandlers {
 		}
 
 		/* ------------------------- Permission Verification ------------------------ */
-		if (permissions.Administrator)
+		var user = (SocketGuildUser) command.User;
+		if (Permissions.userCanChangeSettings(user))
 		{
 			var setting = subCommandName;
 			/* ------------------------------ Value Change ------------------------------ */

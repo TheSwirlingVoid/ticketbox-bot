@@ -211,9 +211,6 @@ namespace TicketBox
 			var subCommandName = subCommand.Name;
 			var commandParameters = subCommand.Options.ToArray();
 
-			// permissions—for commands
-			var permissions = ((SocketGuildUser) command.User).GuildPermissions;
-
 			switch(command.CommandName)
 			{
 				case "poll":
@@ -229,8 +226,7 @@ namespace TicketBox
 					await CommandHandlers.SettingsCommand(
 						new DocumentWithCollection(discordServersCollection, serverDoc),
 						command,
-						options,
-						permissions
+						options
 					);
 				break;
 			}
@@ -242,8 +238,13 @@ namespace TicketBox
 			// Create the server's document
 			await JoinFunctions.createServerDocument(guild.Id);
 			/* ----------------------------- Welcome Message ---------------------------- */
-			var welcomeText = File.ReadAllText("src/welcome_message.txt");
+			await sendWelcomeMessage(guild);
 			await numServersStatus();
+		}
+
+		public static async Task sendWelcomeMessage(SocketGuild guild)
+		{
+			var welcomeText = File.ReadAllText("src/welcome_message.txt");
 			await guild.SystemChannel.SendMessageAsync(welcomeText);
 		}
 
@@ -292,8 +293,8 @@ namespace TicketBox
 				break;
 
 				case "close-poll-dc":
-					var permissions = ((SocketGuildUser) messageComponent.User).GuildPermissions;
-					if (permissions.ManageMessages || permissions.Administrator)
+					var user = (SocketGuildUser) messageComponent.User;
+					if (Permissions.userCanClosePoll(user))
 						/* --------------------------- Get and Close Poll --------------------------- */
 						await DualChoice.getPollByMessage(serverDoc,messageScope)
 							.close(

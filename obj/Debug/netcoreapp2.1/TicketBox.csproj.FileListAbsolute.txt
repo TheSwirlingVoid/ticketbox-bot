@@ -1,5 +1,0 @@
-/Users/rnsug/Documents/discordbots/TicketBox/obj/Debug/netcoreapp2.1/TicketBox.csproj.AssemblyReference.cache
-/Users/rnsug/Documents/discordbots/TicketBox/obj/Debug/netcoreapp2.1/TicketBox.GeneratedMSBuildEditorConfig.editorconfig
-/Users/rnsug/Documents/discordbots/TicketBox/obj/Debug/netcoreapp2.1/TicketBox.AssemblyInfoInputs.cache
-/Users/rnsug/Documents/discordbots/TicketBox/obj/Debug/netcoreapp2.1/TicketBox.AssemblyInfo.cs
-/Users/rnsug/Documents/discordbots/TicketBox/obj/Debug/netcoreapp2.1/TicketBox.csproj.CoreCompileInputs.cache
