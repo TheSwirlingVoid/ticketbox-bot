@@ -38,7 +38,7 @@ static class CommandFunctions {
 		switch (subCommand)
 		{
 			case "expiry_days":
-				return "You need to enter a whole number from `1-14`!";
+				return Messages.INVALID_EXPIRY_DAYS;
 
 			default:
 				return "";

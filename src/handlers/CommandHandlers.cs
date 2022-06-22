@@ -1,12 +1,30 @@
 using Discord;
+using Discord.Interactions;
+using Discord.Net;
 using Discord.WebSocket;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using TicketBox;
 
 static class CommandHandlers {
+
 	public static async Task PollDualChoiceCommand(SocketSlashCommand command, BotSettings settings, string pollText) 
-	{
+	{	
+		await command.DeferAsync();
+		var requiredPerms = Permissions.requiredBotPermsDualChoice(
+			command.GuildId.GetValueOrDefault(),
+			command.ChannelId.GetValueOrDefault()
+		);
+
+		if (!requiredPerms)
+		{
+			await command.FollowupAsync(
+				Messages.INSUFFICIENT_BASE_BOT_PERMS,
+				ephemeral: true
+			);
+			return;
+		}
+
 		var expiryDate = DateTimeOffset.Now.AddDays(settings.ExpiryDays);
 		var stringExpiryDate = $"Expires {expiryDate.Date.ToString("MM/dd/yyyy")}";
 		var unixExpiryTime = ((DateTimeOffset) expiryDate).ToUnixTimeSeconds();
@@ -23,6 +41,7 @@ static class CommandHandlers {
 
 		/* --------------------------- Bot Embed Response --------------------------- */
 		var pollEmbed = embedData.createInitialEmbed(pollText);
+
 		var message = await DualChoice.createMessage(command, pollEmbed);
 
 		var coreData = new DualChoiceCoreData(
@@ -44,8 +63,21 @@ static class CommandHandlers {
 		dualChoice.saveInitialPoll(command);
 	}
 
+	[RequireUserPermissionAttribute(GuildPermission.Administrator)]
 	public static async Task SettingsCommand(DocumentWithCollection docCollection, SocketSlashCommand command, SocketSlashCommandDataOption[] options)
 	{
+		await command.DeferAsync();
+		var requiredPerms = Permissions.requiredUserPermsSettings(command);
+		
+		if (!requiredPerms)
+		{
+			await command.FollowupAsync(
+				Messages.ADMIN_REQUIRED,
+				ephemeral: true
+			);
+			return;
+		}
+
 		var subCommand = options.First();
 		var subCommandName = subCommand.Name;
 		var commandParameters = subCommand.Options.ToArray();
@@ -57,28 +89,23 @@ static class CommandHandlers {
 		if (!successfulValidation)
 		{
 			var failString = CommandFunctions.getParameterFailString(subCommandName);
-			await command.RespondAsync(failString, ephemeral: true);
+			await command.FollowupAsync(failString, ephemeral: true);
 			return;
 		}
 
 		/* ------------------------- Permission Verification ------------------------ */
 		var user = (SocketGuildUser) command.User;
-		if (Permissions.userCanChangeSettings(user))
-		{
-			var setting = subCommandName;
-			/* ------------------------------ Value Change ------------------------------ */
-			await CommandHandlers.changeOption(
-						docCollection,
-						(string)subCommandName, 
-						validated
-					);
-			await command.RespondAsync(
-				$"The setting `{subCommandName}` was successfully updated to `{validated.ToString()}`!", 
-				ephemeral: true
-			);
-		}
-		else
-			await command.RespondAsync("You need to be an **Administrator** to change this bot's server settings!", ephemeral: true);
+		var setting = subCommandName;
+		/* ------------------------------ Value Change ------------------------------ */
+		await CommandHandlers.changeOption(
+					docCollection,
+					(string)subCommandName, 
+					validated
+				);
+		await command.FollowupAsync(
+			Messages.updatedSetting(subCommandName, validated.AsString), 
+			ephemeral: true
+		);
 	}
 
 	public static async Task changeOption(DocumentWithCollection docCollection, String option, BsonValue value)

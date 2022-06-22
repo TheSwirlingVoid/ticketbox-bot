@@ -1,4 +1,6 @@
 ﻿using Discord;
+using Discord.Commands;
+using Discord.Net;
 using Discord.WebSocket;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -57,7 +59,7 @@ namespace TicketBox
 				socketChannel.Id,
 				message.Id
 			);
-			
+
 			var pollDoc = DocumentFunctions.getPollDocument(messageScope);
 
 			if (pollDoc != new BsonDocument{})
@@ -100,7 +102,7 @@ namespace TicketBox
 						var dualChoice = new DualChoice(
 							coreData,
 							BotSettings.getServerSettings(
-								DocumentFunctions.getServerDocument(serverId)
+								DocumentFunctions.getServerSettingsDocument(serverId)
 							)
 						);
 						/* ------------------------------- Expire Poll ------------------------------ */
@@ -141,6 +143,7 @@ namespace TicketBox
 			}
 			/* -------------------------- Add Missing Documents ------------------------- */
 			await StartupFunctions.addMissingDocs();
+			await StartupFunctions.removeUnusedDocs();
 
 			// ignore these warnings–these functions need to run concurrently
 			//statusUpdater(60);
@@ -201,9 +204,8 @@ namespace TicketBox
 
 		private async Task SlashCommandHandler(SocketSlashCommand command)
 		{
-
 			var options = command.Data.Options.ToArray();
-			var serverDoc = DocumentFunctions.getServerDocument(command.GuildId.GetValueOrDefault());
+			var serverDoc = DocumentFunctions.getServerSettingsDocument(command.GuildId.GetValueOrDefault());
 			var settings = BotSettings.getServerSettings(serverDoc);
 
 			// get the subCommand
@@ -258,7 +260,7 @@ namespace TicketBox
 
 		private async Task ButtonExecuted(SocketMessageComponent messageComponent)
 		{
-			var serverDoc = DocumentFunctions.getServerDocument(
+			var serverDoc = DocumentFunctions.getServerSettingsDocument(
 								messageComponent.GuildId.GetValueOrDefault()
 							);
 			var messageScope = new MessageScope(
@@ -268,53 +270,52 @@ namespace TicketBox
 							);
 			var serverSettings = BotSettings.getServerSettings(serverDoc);
 
-			switch (messageComponent.Data.CustomId)
+			try
 			{
-				case "upvote-poll-dc":
-					try
-					{
-						await ButtonHandlers.VoteButton(
-							serverSettings,
-							messageComponent,
-							VoteStyle.UPVOTE
-						);
-					}
-					catch(Discord.Net.HttpException) { }
-				break;
-
-				case "downvote-poll-dc":
-					try
-					{
-						await ButtonHandlers.VoteButton(
-							serverSettings,
-							messageComponent,
-							VoteStyle.DOWNVOTE
-						);
-					}
-					catch(Discord.Net.HttpException) { }
-				break;
-
-				case "retractvote-poll-dc":
-					await ButtonHandlers.RetractVote(
-						serverSettings, 
-						messageComponent
-					);
-				break;
-
-				case "close-poll-dc":
-					var user = (SocketGuildUser) messageComponent.User;
-					if (Permissions.userCanClosePoll(user))
-						/* --------------------------- Get and Close Poll --------------------------- */
-						await DualChoice.getPollByMessage(serverDoc,messageScope)
-							.close(
-								DocumentFunctions.getPollDocument(messageScope),
-								messageComponent
+				switch (messageComponent.Data.CustomId)
+				{
+					case "upvote-poll-dc":
+						try
+						{
+							await ButtonHandlers.VoteButton(
+								serverSettings,
+								messageComponent,
+								VoteStyle.UPVOTE
 							);
-						/* -------------------------------------------------------------------------- */
-					else {
-						await messageComponent.RespondAsync("You need the **Manage Messages** permission or need to be an **Administrator** to close polls!", ephemeral: true);
-					}
-				break;
+						}
+						catch(Discord.Net.HttpException) { }
+					break;
+
+					case "downvote-poll-dc":
+						try
+						{
+							await ButtonHandlers.VoteButton(
+								serverSettings,
+								messageComponent,
+								VoteStyle.DOWNVOTE
+							);
+						}
+						catch(Discord.Net.HttpException) { }
+					break;
+
+					case "retractvote-poll-dc":
+						await ButtonHandlers.RetractVote(
+							serverSettings, 
+							messageComponent
+						);
+					break;
+
+					case "close-poll-dc":
+						await ButtonHandlers.ClosePoll(serverDoc, messageScope, messageComponent);
+					break;
+				}
+			}
+			catch (Exception)
+			{	
+				await messageComponent.FollowupAsync(
+					Messages.POLL_FAIL,
+					ephemeral: true
+				);
 			}
 		}
 	}

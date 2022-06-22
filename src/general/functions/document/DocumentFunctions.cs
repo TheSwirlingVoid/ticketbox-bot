@@ -8,9 +8,14 @@ static class DocumentFunctions {
 		return Builders<BsonDocument>.Filter.Eq("server_id", guildId);
 	}
 
-	public static BsonDocument getServerDocument(ulong serverId)
+	public static BsonDocument getServerSettingsDocument(ulong serverId)
 	{
 		return Program.discordServersCollection.Find(DocumentFunctions.serverIDFilter(serverId)).ToList()[0];
+	}
+
+	public static List<BsonDocument> getServerSettingsDocuments()
+	{
+		return Program.discordServersCollection.Find(new BsonDocument{}).ToList();
 	}
 
 	public static bool serverDocExists(ulong guildId)
@@ -25,11 +30,15 @@ static class DocumentFunctions {
 		}
 	}
 
-	public static List<BsonDocument> getPollDocuments(ulong serverId) 
+	public static List<BsonDocument> getPollDocuments() 
 	{
-		var serverFilter = Builders<BsonDocument>.Filter.Eq("server_id", serverId);
+		return Program.pollCollection.Find(new BsonDocument{}).ToList();
+	}
 
-		return Program.pollCollection.Find(serverFilter).ToList();
+	public static List<BsonDocument> getServerPollDocuments(ulong serverId) 
+	{
+		var filter = serverIDFilter(serverId);
+		return Program.pollCollection.Find(filter).ToList();
 	}
 
 	/// returns empty BsonDocument if no match

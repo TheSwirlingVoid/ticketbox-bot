@@ -120,9 +120,6 @@ class DualChoice {
 
 	public static async Task<Discord.Rest.RestFollowupMessage> createMessage(SocketSlashCommand command, Embed messageEmbed)
 	{
-		// Defer the response, meaning the bot will recognize that the command was sent
-		// but won't finish its response.
-		await command.DeferAsync();
 		// Follow up the deferrance with a final message response
 		return await command.FollowupAsync(embed: messageEmbed, components: createButtons(false));
 	}
@@ -193,14 +190,7 @@ class DualChoice {
 
 	public static bool userVoted(bool? previousValue)
 	{
-		if (previousValue.HasValue)
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
+		return previousValue.HasValue;
 	}
 
 	//TODO: MOVE TO SUBCLASS
@@ -256,8 +246,8 @@ class DualChoice {
 		return new ComponentBuilder()
 			.AddRow(
 				new ActionRowBuilder()
-					.WithButton(label: "Upvote", customId: "upvote-poll-dc", emote: Emote.Parse("<:upvote:988923628571738164>"), style: ButtonStyle.Primary, disabled: disabled)
-					.WithButton(label: "Downvote", customId: "downvote-poll-dc", emote: Emote.Parse("<:downvote:988923662293934141>"), style: ButtonStyle.Primary, disabled: disabled)
+					.WithButton(label: "Upvote", customId: "upvote-poll-dc", emote: Emote.Parse("<:upvote:988965597117296670>"), style: ButtonStyle.Primary, disabled: disabled)
+					.WithButton(label: "Downvote", customId: "downvote-poll-dc", emote: Emote.Parse("<:downvote:988965570697396255>"), style: ButtonStyle.Primary, disabled: disabled)
 			)
 			.AddRow(
 				new ActionRowBuilder()
@@ -295,7 +285,7 @@ class DualChoice {
 		this.EmbedData.ExpiryString = $"Closed by {messageComponent.User}";
 
 		await terminate(pollDocument);
-		await messageComponent.RespondAsync("Poll successfully closed!", ephemeral: true);
+		await messageComponent.FollowupAsync(Messages.POLL_CLOSE_SUCCESS, ephemeral: true);
 	}
 
 	public async Task expire(BsonDocument pollDocument)
@@ -320,7 +310,7 @@ class DualChoice {
 
 	public static int voteValue(BsonDocument document, VoteStyle voteType)
 	{
-		return document["votes"][writeStrings[(int)voteType]].ToInt32();
+		return document["votes"][writeStrings[(int)voteType]].AsInt32;
 	}
 }
 

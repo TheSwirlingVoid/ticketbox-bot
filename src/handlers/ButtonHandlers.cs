@@ -1,4 +1,5 @@
 using Discord;
+using Discord.Interactions;
 using Discord.WebSocket;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -7,6 +8,7 @@ using TicketBox;
 class ButtonHandlers {
 	public static async Task VoteButton(BotSettings settings, SocketMessageComponent messageComponent, VoteStyle voteType)
 	{
+		await messageComponent.DeferAsync();
 		/* -------------------------------- Base Info ------------------------------- */
 		var channel = messageComponent.Channel;
 		var message = messageComponent.Message;
@@ -21,7 +23,7 @@ class ButtonHandlers {
 		// If no poll index was found
 		if (pollDoc == null)
 		{
-			await messageComponent.RespondAsync();
+			await messageComponent.FollowupAsync();
 			return;
 		}
 		// there will only be 1 document for the poll
@@ -34,7 +36,7 @@ class ButtonHandlers {
 		if (DualChoice.userChoiceStagnant(userPreviousValue, voteType))
 		{
 			// Return if the user hasn't picked a different option
-			await messageComponent.RespondAsync("You have already selected this vote! You can still change your vote by clicking the other option.", ephemeral: true);
+			await messageComponent.FollowupAsync(Messages.VOTE_REDUNDANT, ephemeral: true);
 			return;
 		}
 
@@ -65,11 +67,11 @@ class ButtonHandlers {
 
 		/* --------------------------------- Update --------------------------------- */
 		var update = Builders<BsonDocument>.Update.Set(
-			$"votes.voters.{messageComponent.User.Id.ToString()}",
+			$"votes.voters.{messageComponent.User.Id}",
 			Convert.ToBoolean(voteType)
 		);
-		update = update.Set($"votes.upvotes", upvotes);
-		update = update.Set($"votes.downvotes", downvotes);
+		update = update.Set("votes.upvotes", upvotes);
+		update = update.Set("votes.downvotes", downvotes);
 
 		await Program.pollCollection.UpdateOneAsync(pollDoc, update);
 
@@ -91,13 +93,37 @@ class ButtonHandlers {
 
 		/* -------------------------------- Response -------------------------------- */
 		if (userVoted)
-			await messageComponent.RespondAsync("Vote successfully switched!", ephemeral: true);
+			await messageComponent.FollowupAsync(Messages.VOTE_SWITCH_SUCCESS, ephemeral: true);
 		else {
-			await messageComponent.RespondAsync("Vote successful!", ephemeral: true);
+			await messageComponent.FollowupAsync(Messages.VOTE_SUCCESS, ephemeral: true);
 		}
 	}
+
+	public static async Task ClosePoll(BsonDocument serverDoc, MessageScope messageScope, SocketMessageComponent messageComponent)
+	{	
+		await messageComponent.DeferAsync();
+		
+		var requiredPerms = Permissions.requiredUserPermsClosePoll(messageComponent);
+
+		if (!requiredPerms)
+		{
+			await messageComponent.FollowupAsync(
+				Messages.INSUFFICIENT_CLOSE_PERMS, ephemeral: true
+			);
+		}
+		/* --------------------------- Get and Close Poll --------------------------- */
+		await DualChoice.getPollByMessage(serverDoc,messageScope)
+			.close(
+				DocumentFunctions.getPollDocument(messageScope),
+				messageComponent
+			);
+		/* -------------------------------------------------------------------------- */
+	}
+
 	public static async Task RetractVote(BotSettings settings, SocketMessageComponent messageComponent)
 	{
+		await messageComponent.DeferAsync();
+
 		var messageScope = new MessageScope(
 			messageComponent.GuildId.GetValueOrDefault(),
 			messageComponent.ChannelId.GetValueOrDefault(),
@@ -128,10 +154,11 @@ class ButtonHandlers {
 
 			await dualChoice.updateEmbed(pollDoc);
 			await Program.pollCollection.UpdateOneAsync(pollDoc, update);
-			await messageComponent.RespondAsync("Vote successfully removed!", ephemeral: true);
+
+			await messageComponent.FollowupAsync(Messages.VOTE_RETRACT_SUCCESS, ephemeral: true);
 		}
 		else {
-			await messageComponent.RespondAsync("You haven't voted yet!", ephemeral: true);
+			await messageComponent.FollowupAsync(Messages.NO_RETRACTABLE_VOTE, ephemeral: true);
 		}
 	}
 }
