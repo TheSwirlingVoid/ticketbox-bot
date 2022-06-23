@@ -5,15 +5,17 @@ class DualChoiceEmbedData {
 	public String UserName { get; set; }
 	public DateTimeOffset PollDate { get; set; }
 	public String ExpiryString { get; set; }
+	public String PollText { get; set; }
 
-	public DualChoiceEmbedData(String userAvatar, String userName, DateTimeOffset pollDate, String expiryString)
+	public DualChoiceEmbedData(String pollText, String userAvatar, String userName, DateTimeOffset pollDate, String expiryString)
 	{
 		UserAvatar = userAvatar;
 		UserName = userName;
 		PollDate = pollDate;
 		ExpiryString = expiryString;
+		PollText = pollText;
 	}
-	
+
 	public Embed createInitialEmbed(String pollText)
 	{
 
@@ -27,11 +29,11 @@ class DualChoiceEmbedData {
 			.WithDescription("**———————————————**")
 			.WithFooter("\n\n"+0+footerString)
 			.WithTimestamp(DateTimeOffset.Now)
+			.WithAuthor(new EmbedAuthorBuilder()
+				.WithIconUrl(UserAvatar)
+				.WithName(UserName)
+			)
 			.AddField("Poll", $"{pollText}")
-				.WithAuthor(new EmbedAuthorBuilder()
-					.WithIconUrl(UserAvatar)
-					.WithName(UserName)
-				)
 			.AddField("Stats", 
 				$"{upvoteBar}\n**{0}%** Upvoted"+ 
 				$"\n{downvoteBar}\n**{0}%** Downvoted"
@@ -47,14 +49,14 @@ class DualChoiceEmbedData {
 		String barTypeRight;
 		if (style == VoteStyle.UPVOTE)
 		{
-			barTypeLeft = "<:bar_full_left:983184373258027028>";
-			barTypeMid = "<:bar_full:983184376546345030>";
-			barTypeRight = "<:bar_full_right:983184375061569536>";
+			barTypeLeft = "<:bar_left:989295222901063712>";
+			barTypeMid = "<:bar:989295226566873168>";
+			barTypeRight = "<:bar_right:989295225174360094>";
 		}
 		else {
-			barTypeLeft = $"<:negativebar_full_left:983184377670402118>";
-			barTypeMid = $"<:negativebar_full:983184379947917332>";
-			barTypeRight = $"<:negativebar_full_right:983184378836422656>";
+			barTypeLeft = "<:negativebar_left:989295192328765511>";
+			barTypeMid = "<:negativebar:989295194367221851>";
+			barTypeRight = "<:negativebar_right:989295193348014150>";
 		}
 
 		Func<int,int> numStartBars = x => Math.Min(Math.Max(0, x), 1);
@@ -65,9 +67,9 @@ class DualChoiceEmbedData {
 			string.Concat(Enumerable.Repeat(barTypeLeft, numStartBars(multiplier)))
 			+ string.Concat(Enumerable.Repeat(barTypeMid, numMidBars(multiplier)))
 			+ string.Concat(Enumerable.Repeat(barTypeRight, numEndBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:983184368501669958>", 1-numStartBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty:983184371269906454>", 8-numMidBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:983184370296827904>", 1-numEndBars(multiplier)));
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:989295218849361920>", 1-numStartBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty:989295221638569985>", 8-numMidBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:989295220443197500>", 1-numEndBars(multiplier)));
 
 		return barString;
 	}

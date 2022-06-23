@@ -8,7 +8,7 @@ using TicketBox;
 class ButtonHandlers {
 	public static async Task VoteButton(BotSettings settings, SocketMessageComponent messageComponent, VoteStyle voteType)
 	{
-		await messageComponent.DeferAsync();
+		await messageComponent.DeferAsync(ephemeral: true);
 		/* -------------------------------- Base Info ------------------------------- */
 		var channel = messageComponent.Channel;
 		var message = messageComponent.Message;
@@ -23,7 +23,7 @@ class ButtonHandlers {
 		// If no poll index was found
 		if (pollDoc == null)
 		{
-			await messageComponent.FollowupAsync();
+			await messageComponent.FollowupAsync(Messages.NO_POLL_DATA);
 			return;
 		}
 		// there will only be 1 document for the poll
@@ -31,39 +31,52 @@ class ButtonHandlers {
 		// Check if user is listed under the voters list
 		// Check for a previous user vote value (ex. USER_ID: true)
 		bool? userPreviousValue = DualChoice.userPreviousValue(pollDoc, messageComponent.User.Id);
+		bool userVoted = DualChoice.userVoted(userPreviousValue);
 
-		/* ------------------------ Upvote/Downvote Handling ------------------------ */
-		if (DualChoice.userChoiceStagnant(userPreviousValue, voteType))
+		int otherVoteValue;
+		if (userVoted)
 		{
-			// Return if the user hasn't picked a different option
-			await messageComponent.FollowupAsync(Messages.VOTE_REDUNDANT, ephemeral: true);
-			return;
+			/* ------------------------ Upvote/Downvote Handling ------------------------ */
+			if (DualChoice.userChoiceStagnant(userPreviousValue, voteType))
+			{
+				// Return if the user hasn't picked a different option
+				await messageComponent.FollowupAsync(Messages.VOTE_REDUNDANT, ephemeral: true);
+				return;
+			}
+			else {
+				otherVoteValue = DualChoice.voteValue(pollDoc, 1-voteType)-1;
+			}
+		}
+		else {
+			otherVoteValue = DualChoice.voteValue(pollDoc, 1-voteType);
 		}
 
 		// get the value of upvotes/downvotes
 		int upvotes;
 		int downvotes;
-		bool userVoted = DualChoice.userVoted(userPreviousValue);
 
 		if (voteType == VoteStyle.UPVOTE) {
 			// get the current upvotes/downvotes value
-			upvotes = DualChoice.voteValue(pollDoc, voteType);
-			downvotes = DualChoice.voteValue(pollDoc, 1-voteType);
-
-			// add 1 to the vote they chose
-			upvotes++;
-			// subtract 1 from the other if they changed their vote
-			downvotes = userVoted ? downvotes-1 : downvotes;
+			upvotes = DualChoice.voteValue(pollDoc, voteType)+1;
+			downvotes = otherVoteValue;
 		}
 		else {
-			upvotes = DualChoice.voteValue(pollDoc, 1-voteType);
-			downvotes = DualChoice.voteValue(pollDoc, voteType);
-
-			downvotes++;
-			upvotes = userVoted ? upvotes-1 : upvotes;
+			upvotes = otherVoteValue;
+			downvotes = DualChoice.voteValue(pollDoc, voteType)+1;
 		}
 		
 		// Update the user's vote registered based on what they chose
+
+		/* ----------------------------- Message Editing ---------------------------- */
+		var coreData = new DualChoiceCoreData(
+			new MessageScope(serverId, channel.Id, message.Id),
+			upvotes,
+			downvotes
+		);
+		var dualChoice = new DualChoice(coreData, settings);
+		
+		/* ------------------------------ Update Embed ------------------------------ */
+		await dualChoice.updateEmbed();
 
 		/* --------------------------------- Update --------------------------------- */
 		var update = Builders<BsonDocument>.Update.Set(
@@ -75,22 +88,6 @@ class ButtonHandlers {
 
 		await Program.pollCollection.UpdateOneAsync(pollDoc, update);
 
-		/* ----------------------------- Message Editing ---------------------------- */
-		var pollText = pollDoc["poll_text"].AsString;
-
-		var coreData = new DualChoiceCoreData(
-			pollText,
-			new MessageScope(serverId, channel.Id, message.Id),
-			Convert.ToUInt64(pollDoc["user_id"]),
-			upvotes,
-			downvotes
-
-		);
-		var dualChoice = new DualChoice(coreData, settings);
-		
-		/* ------------------------------ Update Embed ------------------------------ */
-		await dualChoice.updateEmbed(pollDoc);
-
 		/* -------------------------------- Response -------------------------------- */
 		if (userVoted)
 			await messageComponent.FollowupAsync(Messages.VOTE_SWITCH_SUCCESS, ephemeral: true);
@@ -101,8 +98,8 @@ class ButtonHandlers {
 
 	public static async Task ClosePoll(BsonDocument serverDoc, MessageScope messageScope, SocketMessageComponent messageComponent)
 	{	
-		await messageComponent.DeferAsync();
-		
+		await messageComponent.DeferAsync(ephemeral: true);
+
 		var requiredPerms = Permissions.requiredUserPermsClosePoll(messageComponent);
 
 		if (!requiredPerms)
@@ -122,38 +119,34 @@ class ButtonHandlers {
 
 	public static async Task RetractVote(BotSettings settings, SocketMessageComponent messageComponent)
 	{
-		await messageComponent.DeferAsync();
+		await messageComponent.DeferAsync(ephemeral: true);
 
 		var messageScope = new MessageScope(
 			messageComponent.GuildId.GetValueOrDefault(),
 			messageComponent.ChannelId.GetValueOrDefault(),
 			messageComponent.Message.Id
 		);
+
 		var pollDoc = DocumentFunctions.getPollDocument(messageScope);
 		var userId = messageComponent.User.Id;
 
 		var previousValue = DualChoice.userPreviousValue(pollDoc, userId);
-
-		int upvotes = DualChoice.voteValue(pollDoc, VoteStyle.UPVOTE);
-		int downvotes = DualChoice.voteValue(pollDoc, VoteStyle.DOWNVOTE);
 		// check for vote
-		if (previousValue != null)
+		if (previousValue.HasValue)
 		{
-			
+			// get the poll's data from the polldoc and represent it as a DualChoice object	
 			var coreData = new DualChoiceCoreData(
-				pollDoc["poll_text"].AsString,
 				messageScope,
-				Convert.ToUInt64(pollDoc["user_id"]),
-				upvotes,
-				downvotes
+				DualChoice.voteValue(pollDoc, VoteStyle.UPVOTE),
+				DualChoice.voteValue(pollDoc, VoteStyle.DOWNVOTE)
 			);
-
 			var dualChoice = new DualChoice(coreData, settings);
 
 			var update = dualChoice.getRetractUpdate(previousValue.Value, messageComponent);
-
-			await dualChoice.updateEmbed(pollDoc);
 			await Program.pollCollection.UpdateOneAsync(pollDoc, update);
+
+			await dualChoice.updateEmbed();
+
 
 			await messageComponent.FollowupAsync(Messages.VOTE_RETRACT_SUCCESS, ephemeral: true);
 		}

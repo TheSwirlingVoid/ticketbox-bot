@@ -16,7 +16,7 @@ static class Permissions {
 		var userPerms = getUserGuildPerms((SocketGuildUser)messageComponent.User);
 		return (
 			userPerms.Administrator
-			| userPerms.ManageMessages
+			|| userPerms.ManageMessages
 		);
 	}
 

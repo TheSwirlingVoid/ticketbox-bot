@@ -11,13 +11,7 @@ class DualChoice {
 
 	//TODO: MOVE TO SUBCLASS
 	public DualChoiceEmbedData EmbedData { get; set; }
-	public decimal TotalVoters { get; set; }
 
-	//TODO: MOVE TO SUBCLASS
-	public decimal PercentUpvoted { get; set; }
-
-	//TODO: MOVE TO SUBCLASS
-	public decimal PercentDownvoted { get; set; }
 	public long ExpiryTime {get; set;}
 	private bool DisabledButtons { get; set; }
 	public MessageScope messageScope { get; set; }
@@ -29,6 +23,7 @@ class DualChoice {
 	{
 		CoreData = coreData;
 		EmbedData = new DualChoiceEmbedData(
+			"",
 			"",
 			"",
 			DateTimeOffset.Now,
@@ -48,12 +43,9 @@ class DualChoice {
 		var pollVotes = poll["votes"];
 
 		var coreData = new DualChoiceCoreData(
-			poll["poll_text"].AsString,
 			scope,
-			Convert.ToUInt64(poll["user_id"]),
 			pollVotes["upvotes"].AsInt32,
 			pollVotes["downvotes"].AsInt32
-
 		);
 
 		var settings = BotSettings.getServerSettings(serverDoc);
@@ -65,8 +57,6 @@ class DualChoice {
 	{
 		var upvotes = this.CoreData.Upvotes;
 		var downvotes = this.CoreData.Downvotes;
-		var pollText = this.CoreData.PollText;
-		var pollDate = this.EmbedData.PollDate;
 
 		/* --------------------- Vote Percentages & Multipliers --------------------- */
 		// So that you can't divide by 0
@@ -75,44 +65,32 @@ class DualChoice {
 		decimal percentUpvoted = Math.Round(Convert.ToDecimal((upvotes/votesNonZero)*1000))/10;
 		decimal percentDownvoted = Math.Round(Convert.ToDecimal((downvotes/votesNonZero)*1000))/10;
 
-		this.TotalVoters = totalVoters;
-		this.PercentUpvoted = percentUpvoted;
-		this.PercentDownvoted = percentDownvoted;
-		this.EmbedData.PollDate = pollDate;
-
 		// Return the embed build with the data above
-		return buildEmbedWithData();
-	}
-
-	//TODO: MOVE TO SUBCLASS
-	private Embed buildEmbedWithData()
-	{
-
 		// Multipliers for emote percentage bars
-		int upvotedMultiplier = Convert.ToInt32(this.PercentUpvoted/10);
-		int downvotedMultiplier = Convert.ToInt32(this.PercentDownvoted/10);
+		int upvotedMultiplier = Convert.ToInt32(percentUpvoted/10);
+		int downvotedMultiplier = Convert.ToInt32(percentDownvoted/10);
 
 		var upvoteBar = DualChoiceEmbedData.getBarString(upvotedMultiplier, VoteStyle.UPVOTE);
 		var downvoteBar = DualChoiceEmbedData.getBarString(downvotedMultiplier, VoteStyle.DOWNVOTE);
 
 		// footer string (ex. "1 user has voted" vs "2 users have voted")
 		var footerString = " users have voted. ";
-		if (this.TotalVoters == 1)
+		if (totalVoters == 1)
 			footerString = " user has voted. ";
 
-		// Build final embed
+		/* ---------------------------- Build final embed --------------------------- */
 		return new EmbedBuilder()
 			.WithDescription("**———————————————**")
-			.WithFooter("\n\n"+this.TotalVoters+footerString)
+			.WithFooter("\n\n"+totalVoters+footerString)
 			.WithTimestamp(this.EmbedData.PollDate)
-			.AddField("Poll", $"{this.CoreData.PollText}")
-				.WithAuthor(new EmbedAuthorBuilder()
-					.WithIconUrl(this.EmbedData.UserAvatar)
-					.WithName(this.EmbedData.UserName)
-				)
+			.WithAuthor(new EmbedAuthorBuilder()
+				.WithIconUrl(this.EmbedData.UserAvatar)
+				.WithName(this.EmbedData.UserName)
+			)
+			.AddField("Poll", $"{this.EmbedData.PollText}")
 			.AddField("Stats", 
-				$"{upvoteBar}\n**{this.PercentUpvoted}%** Upvoted"+ 
-				$"\n{downvoteBar}\n**{this.PercentDownvoted}%** Downvoted"
+				$"{upvoteBar}\n**{percentUpvoted}%** Upvoted"+ 
+				$"\n{downvoteBar}\n**{percentDownvoted}%** Downvoted"
 			)
 			.AddField("Expiry Status", this.EmbedData.ExpiryString)
 			.Build();
@@ -144,8 +122,6 @@ class DualChoice {
 		BsonDocument pollDocument = new BsonDocument
 		{
 			{ "server_id", BsonValue.Create(command.GuildId.GetValueOrDefault()) },
-			{ "user_id", BsonValue.Create(command.User.Id) },
-			{ "poll_text", this.CoreData.PollText },
 			{ "votes", new BsonDocument {
 				{ "upvotes", 0 },
 				{ "downvotes", 0 },
@@ -153,7 +129,6 @@ class DualChoice {
 			} },
 			{ "message_id", BsonValue.Create(this.messageScope.MessageID) },
 			{ "channel_id", BsonValue.Create(command.Channel.Id) },
-			{ "expiry_string", this.EmbedData.ExpiryString },
 			{ "unix_expiry_time", this.ExpiryTime }
 		};
 
@@ -194,31 +169,19 @@ class DualChoice {
 	}
 
 	//TODO: MOVE TO SUBCLASS
-	public async Task updateEmbed(BsonDocument pollDoc)
+	public async Task updateEmbed()
 	{
 		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
 		var message = await channel.GetMessageAsync(messageScope.MessageID);
 
-
-		Action<MessageProperties> messageEdit = (m) => {
+		await channel.ModifyMessageAsync(message.Id, (m) => {
 			
 			/* --------------------------- Current Embed Data --------------------------- */
-			var userId = Convert.ToUInt64(pollDoc["user_id"]);
-			var embedAuthor = Program.client.GetUser(userId);
-			String username;
-			String userAvatar;
+			var embedAuthor = message.Embeds.First().Author.GetValueOrDefault();
+			this.EmbedData.PollText = message.Embeds.First().Fields[0].Value;
 
-			/* ------------------------- Validate User Existence ------------------------ */
-			if (embedAuthor == null) {
-				username = "Unobtainable User#0000";
-				userAvatar = "";
-			}
-			else {
-				username = embedAuthor.Username;
-				userAvatar = embedAuthor.GetAvatarUrl();
-			}
-
-			var expiryString = (string)pollDoc["expiry_string"];
+			String username = embedAuthor.ToString();
+			String userAvatar = embedAuthor.IconUrl;
 
 			if (this.DisabledButtons)
 			{
@@ -226,7 +189,7 @@ class DualChoice {
 			}
 			// default expiry string (the date format)
 			if (this.EmbedData.ExpiryString == "") {
-				this.EmbedData.ExpiryString = expiryString;
+				this.EmbedData.ExpiryString = message.Embeds.First().Fields[2].Value;
 			}
 
 			this.EmbedData.UserAvatar = userAvatar;
@@ -235,9 +198,7 @@ class DualChoice {
 
 			/* ------------------------------ Create Embed ------------------------------ */
 			m.Embeds = new[] { createEmbed() };
-		};
-
-		await channel.ModifyMessageAsync(message.Id, m => messageEdit(m));
+		});
 	}
 
 	//TODO: MOVE TO SUBCLASS
@@ -304,7 +265,7 @@ class DualChoice {
 		var message = await channel.GetMessageAsync(messageId);
 
 		this.DisabledButtons = true;
-		await this.updateEmbed(pollDocument);
+		await this.updateEmbed();
 		await DualChoice.removePollData(pollDocument);
 	}
 

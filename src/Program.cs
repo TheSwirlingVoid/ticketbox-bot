@@ -93,9 +93,7 @@ namespace TicketBox
 						);
 
 						var coreData = new DualChoiceCoreData(
-							pollDoc["poll_text"].AsString,
 							messageScope,
-							Convert.ToUInt64(pollDoc["user_id"]),
 							pollDoc["votes"]["upvotes"].AsInt32,	
 							pollDoc["votes"]["downvotes"].AsInt32
 						);

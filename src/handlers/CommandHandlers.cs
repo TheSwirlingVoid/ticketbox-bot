@@ -32,6 +32,7 @@ static class CommandHandlers {
 		var commandOptions = command.Data.Options.ToArray();
 
 		var embedData = new DualChoiceEmbedData(
+			pollText,
 			command.User.GetAvatarUrl(),
 			command.User.ToString(),
 			DateTimeOffset.Now,
@@ -45,11 +46,10 @@ static class CommandHandlers {
 		var message = await DualChoice.createMessage(command, pollEmbed);
 
 		var coreData = new DualChoiceCoreData(
-			pollText,
+			// pollText,
 			new MessageScope(command.GuildId.GetValueOrDefault(),
 			command.ChannelId.GetValueOrDefault(),
 			message.Id),
-			Convert.ToUInt64(command.User.Id),
 			0,
 			0
 		);
@@ -63,10 +63,9 @@ static class CommandHandlers {
 		dualChoice.saveInitialPoll(command);
 	}
 
-	[RequireUserPermissionAttribute(GuildPermission.Administrator)]
 	public static async Task SettingsCommand(DocumentWithCollection docCollection, SocketSlashCommand command, SocketSlashCommandDataOption[] options)
 	{
-		await command.DeferAsync();
+		await command.DeferAsync(ephemeral: true);
 		var requiredPerms = Permissions.requiredUserPermsSettings(command);
 		
 		if (!requiredPerms)
@@ -103,7 +102,7 @@ static class CommandHandlers {
 					validated
 				);
 		await command.FollowupAsync(
-			Messages.updatedSetting(subCommandName, validated.AsString), 
+			Messages.updatedSetting(subCommandName, validated.ToString()),
 			ephemeral: true
 		);
 	}

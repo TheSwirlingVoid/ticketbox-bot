@@ -1,3 +1,5 @@
+using MongoDB.Bson;
+
 static class Messages {
 	public static readonly String INSUFFICIENT_BASE_BOT_PERMS = (
 		"I need __all__ of the following channel perms to create and update polls here: "
@@ -44,7 +46,12 @@ static class Messages {
 		"You need to enter a whole number from `1-14`!"
 	);
 
-	public static readonly Func<String, String, String> updatedSetting = (subCmdName, value) => {
+	public static readonly String NO_POLL_DATA = (
+		"No poll data was found! This poll should be deleted."
+	);
+
+	public static String updatedSetting(String subCmdName, BsonValue value)
+	{
 		return $"The setting `{subCmdName}` was successfully updated to `{value}`!";
-	};
+	}
 }
