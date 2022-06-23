@@ -168,17 +168,32 @@ class DualChoice {
 		return previousValue.HasValue;
 	}
 
+	public static async Task<bool> deleteIfEmbedDeleted(IMessage message)
+	{
+		var currentEmbeds = message.Embeds;
+		// no point in updating the embed if the user didn't want it there ;)
+		if (currentEmbeds.Count == 0)
+		{
+			// delete the poll msg if it's invalid
+			await message.DeleteAsync();
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
 	//TODO: MOVE TO SUBCLASS
 	public async Task updateEmbed()
 	{
 		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
 		var message = await channel.GetMessageAsync(messageScope.MessageID);
 
-		await channel.ModifyMessageAsync(message.Id, (m) => {
-			
+		await channel.ModifyMessageAsync(message.Id, async (m) => {
 			/* --------------------------- Current Embed Data --------------------------- */
-			var embedAuthor = message.Embeds.First().Author.GetValueOrDefault();
-			this.EmbedData.PollText = message.Embeds.First().Fields[0].Value;
+			var currentEmbed = message.Embeds.First();
+			var embedAuthor = currentEmbed.Author.GetValueOrDefault();
+			this.EmbedData.PollText = currentEmbed.Fields[0].Value;
 
 			String username = embedAuthor.ToString();
 			String userAvatar = embedAuthor.IconUrl;
@@ -189,7 +204,7 @@ class DualChoice {
 			}
 			// default expiry string (the date format)
 			if (this.EmbedData.ExpiryString == "") {
-				this.EmbedData.ExpiryString = message.Embeds.First().Fields[2].Value;
+				this.EmbedData.ExpiryString = currentEmbed.Fields[2].Value;
 			}
 
 			this.EmbedData.UserAvatar = userAvatar;

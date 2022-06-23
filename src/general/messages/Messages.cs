@@ -50,6 +50,10 @@ static class Messages {
 		"No poll data was found! This poll should be deleted."
 	);
 
+	public static readonly String POLL_EMBED_DELETED = (
+		"This poll's embed was deleted; this message must be deleted now!"
+	);
+
 	public static String updatedSetting(String subCmdName, BsonValue value)
 	{
 		return $"The setting `{subCmdName}` was successfully updated to `{value}`!";

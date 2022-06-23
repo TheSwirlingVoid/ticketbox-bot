@@ -13,6 +13,9 @@ class ButtonHandlers {
 		var channel = messageComponent.Channel;
 		var message = messageComponent.Message;
 		var serverId = messageComponent.GuildId.GetValueOrDefault();
+
+		if (await respondToButtonEmbedDeleted(messageComponent))
+			return;
 		/* --------------------------- Index of Poll -------------------------- */
 		// Get all polls, find the index of the poll based on message.Id
 		var pollDoc = DocumentFunctions.getPollDocument(new MessageScope(
@@ -100,6 +103,15 @@ class ButtonHandlers {
 	{	
 		await messageComponent.DeferAsync(ephemeral: true);
 
+		if (await DualChoice.deleteIfEmbedDeleted(messageComponent.Message))
+		{
+			await messageComponent.FollowupAsync(
+				Messages.POLL_EMBED_DELETED, 
+				ephemeral: true
+			);
+			return;
+		}
+
 		var requiredPerms = Permissions.requiredUserPermsClosePoll(messageComponent);
 
 		if (!requiredPerms)
@@ -120,6 +132,9 @@ class ButtonHandlers {
 	public static async Task RetractVote(BotSettings settings, SocketMessageComponent messageComponent)
 	{
 		await messageComponent.DeferAsync(ephemeral: true);
+
+		if (await respondToButtonEmbedDeleted(messageComponent))
+			return;
 
 		var messageScope = new MessageScope(
 			messageComponent.GuildId.GetValueOrDefault(),
@@ -153,5 +168,19 @@ class ButtonHandlers {
 		else {
 			await messageComponent.FollowupAsync(Messages.NO_RETRACTABLE_VOTE, ephemeral: true);
 		}
+	}
+
+	private static async Task<bool> respondToButtonEmbedDeleted(SocketMessageComponent messageComponent)
+	{
+		if (await DualChoice.deleteIfEmbedDeleted(messageComponent.Message))
+		{
+			await messageComponent.FollowupAsync(
+				Messages.POLL_EMBED_DELETED, 
+				ephemeral: true
+			);
+			// relay the bool from the deleteIf.., whether msg contained an embed
+			return true;
+		}
+		return false;
 	}
 }

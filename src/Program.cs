@@ -268,6 +268,9 @@ namespace TicketBox
 							);
 			var serverSettings = BotSettings.getServerSettings(serverDoc);
 
+			var currentEmbeds = messageComponent.Message.Embeds;
+			// no point in updating the embed if the user didn't want it there ;)
+
 			try
 			{
 				switch (messageComponent.Data.CustomId)
