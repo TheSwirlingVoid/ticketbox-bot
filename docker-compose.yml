@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    environment:
+      DB_URL: mongodb://db/ticketboxdb
+
+  db: # the 'db' host, like 'localhost'
+    image: mongo:4.2.21-bionic
+    ports:
+      - 27018:27017
+    volumes:
+      - ticketboxdb:/data/db
+
+volumes:
+  ticketboxdb:

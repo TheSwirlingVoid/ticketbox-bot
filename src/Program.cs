@@ -17,9 +17,11 @@ namespace TicketBox
 			MessageCacheSize = 100
 		};
 		public static DiscordSocketClient client = new DiscordSocketClient();
-		private static readonly string connectionString = "mongodb://localhost:27017/";
+
+		private static readonly String connectionString = System.Environment.GetEnvironmentVariable("DB_URL");
+		// private static readonly String connectionString = "mongodb://localhost:27017/";
 		public static MongoClient mongoClient = new MongoClient(connectionString);
-		public static IMongoDatabase database = mongoClient.GetDatabase("ticketbox-bot");
+		public static IMongoDatabase database = mongoClient.GetDatabase("ticketboxdb");
 		public static IMongoCollection<BsonDocument> discordServersCollection = database.GetCollection<BsonDocument>("DiscordServers");
 		public static IMongoCollection<BsonDocument> pollCollection = database.GetCollection<BsonDocument>("Polls");
 

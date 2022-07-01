@@ -189,7 +189,7 @@ class DualChoice {
 		var channel = (ISocketMessageChannel) Program.client.GetChannel(messageScope.ChannelID);
 		var message = await channel.GetMessageAsync(messageScope.MessageID);
 
-		await channel.ModifyMessageAsync(message.Id, async (m) => {
+		await channel.ModifyMessageAsync(message.Id, (m) => {
 			/* --------------------------- Current Embed Data --------------------------- */
 			var currentEmbed = message.Embeds.First();
 			var embedAuthor = currentEmbed.Author.GetValueOrDefault();

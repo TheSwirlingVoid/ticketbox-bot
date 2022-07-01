@@ -49,14 +49,14 @@ class DualChoiceEmbedData {
 		String barTypeRight;
 		if (style == VoteStyle.UPVOTE)
 		{
-			barTypeLeft = "<:bar_left:989295222901063712>";
-			barTypeMid = "<:bar:989295226566873168>";
-			barTypeRight = "<:bar_right:989295225174360094>";
+			barTypeLeft = "<:bar_left:991957378528456735>";
+			barTypeMid = "<:bar:991957382223634432>";
+			barTypeRight = "<:bar_right:991957380554313760>";
 		}
 		else {
-			barTypeLeft = "<:negativebar_left:989295192328765511>";
-			barTypeMid = "<:negativebar:989295194367221851>";
-			barTypeRight = "<:negativebar_right:989295193348014150>";
+			barTypeLeft = "<:negativebar_left:991957389085507624>";
+			barTypeMid = "<:negativebar:991957392046706718>";
+			barTypeRight = "<:negativebar_right:991957390612234261>";
 		}
 
 		Func<int,int> numStartBars = x => Math.Min(Math.Max(0, x), 1);
@@ -67,9 +67,9 @@ class DualChoiceEmbedData {
 			string.Concat(Enumerable.Repeat(barTypeLeft, numStartBars(multiplier)))
 			+ string.Concat(Enumerable.Repeat(barTypeMid, numMidBars(multiplier)))
 			+ string.Concat(Enumerable.Repeat(barTypeRight, numEndBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_left:989295218849361920>", 1-numStartBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty:989295221638569985>", 8-numMidBars(multiplier)))
-			+ string.Concat(Enumerable.Repeat("<:bar_empty_right:989295220443197500>", 1-numEndBars(multiplier)));
+			+ string.Concat(Enumerable.Repeat("<:emptybar_left:991957384643747870>", 1-numStartBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:emptybar:991957387529437214>", 8-numMidBars(multiplier)))
+			+ string.Concat(Enumerable.Repeat("<:emptybar_right:991957386174668820>", 1-numEndBars(multiplier)));
 
 		return barString;
 	}
